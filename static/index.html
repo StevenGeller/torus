@@ -9,8 +9,10 @@
 <meta property="og:description" content="A semasiographic circular writing system. Encode meaning into form. No beginning. No end.">
 <meta property="og:type" content="website">
 <meta property="og:url" content="https://torus.steven-geller.com">
+<meta property="og:image" content="https://torus.steven-geller.com/og/time%20has%20no%20beginning%20and%20no%20end">
 <meta name="twitter:card" content="summary_large_image">
 <meta name="twitter:creator" content="@steven_geller">
+<link rel="canonical" href="https://torus.steven-geller.com">
 <title>Torus</title>
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><circle cx='50' cy='50' r='40' fill='none' stroke='%231a1a1a' stroke-width='8'/></svg>">
 <style>
@@ -26,8 +28,8 @@
     --color-bg: #fff;
     --color-text-primary: #1a1a1a;
     --color-text-secondary: #374151;
-    --color-text-tertiary: #666;
-    --color-text-muted: #767676;
+    --color-text-tertiary: #555;
+    --color-text-muted: #595959;
     --color-border: #e5e5e5;
     --color-card-bg: #f9f9f9;
     --torus-ink: #1a1a1a;
@@ -41,8 +43,8 @@
         --color-bg: #181818;
         --color-text-primary: #eee;
         --color-text-secondary: #b8b8b8;
-        --color-text-tertiary: #888;
-        --color-text-muted: #888;
+        --color-text-tertiary: #aaa;
+        --color-text-muted: #aaa;
         --color-border: #333;
         --color-card-bg: #222;
         --torus-ink: #d4cdc4;
@@ -199,7 +201,7 @@ main {
     border: none;
     border-bottom: 1px solid var(--color-border);
     color: var(--color-text-primary);
-    font-size: 0.85rem;
+    font-size: 1rem;
     font-family: var(--font-mono);
     padding: 0.6rem 0;
     text-align: center;
@@ -210,7 +212,7 @@ main {
 
 #text-input::placeholder {
     color: var(--color-text-muted);
-    opacity: 0.6;
+    opacity: 1;
 }
 
 #text-input:focus { border-bottom-color: var(--color-text-muted); }
@@ -291,6 +293,16 @@ main {
 .action-btn:hover {
     color: var(--color-text-primary);
     border-color: var(--color-text-muted);
+}
+
+.action-btn:focus-visible, .upload-label:focus-visible, .example-btn:focus-visible {
+    outline: 2px solid var(--color-text-primary);
+    outline-offset: 2px;
+}
+
+#text-input:focus-visible {
+    outline: none;
+    border-bottom-color: var(--color-text-primary);
 }
 
 .upload-label {
@@ -474,11 +486,15 @@ main {
 
 .intro-hint {
     font-size: 0.6rem;
+    font-family: var(--font-mono);
     color: var(--color-text-muted);
+    background: none;
+    border: none;
     opacity: 0;
     margin-top: 1rem;
     animation: introFadeIn 1s ease-out 3s forwards;
     cursor: pointer;
+    letter-spacing: 0.08em;
 }
 
 @keyframes introFadeIn {
@@ -568,7 +584,7 @@ footer a:hover { color: var(--color-text-tertiary); }
     </div>
 
     <div class="input-area">
-        <input type="text" id="text-input" placeholder="type to encode" autocomplete="off" autofocus spellcheck="false" aria-label="Enter text to encode as a circular symbol">
+        <input type="text" id="text-input" placeholder="type to encode" autocomplete="off" autofocus spellcheck="false" maxlength="1000" aria-label="Enter text to encode as a circular symbol">
     </div>
 
     <div class="examples">
@@ -638,7 +654,9 @@ footer a:hover { color: var(--color-text-tertiary); }
     var btnPng = document.getElementById('btn-png');
     var btnShare = document.getElementById('btn-share');
     var symbolContainer = document.querySelector('.symbol-container');
-    var isMobile = window.innerWidth < 600;
+    var mobileQuery = window.matchMedia('(max-width: 599px)');
+    var isMobile = mobileQuery.matches;
+    mobileQuery.addEventListener('change', function(e) { isMobile = e.matches; });
     var fileUpload = document.getElementById('file-upload');
     var decodeResult = document.getElementById('decode-result');
     var shuffleProof = document.getElementById('shuffle-proof');
@@ -699,7 +717,7 @@ footer a:hover { color: var(--color-text-tertiary); }
             '</filter></defs>';
 
         canvas.innerHTML =
-            '<svg viewBox="0 0 600 600" xmlns="http://www.w3.org/2000/svg">' +
+            '<svg viewBox="0 0 600 600" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Torus symbol">' +
             filter +
             '<g fill="var(--torus-ink,#1a1a1a)" filter="url(#ti)">' +
             '<path d="' + d + '" fill-rule="evenodd"/>' +
@@ -775,7 +793,11 @@ footer a:hover { color: var(--color-text-tertiary); }
             var el = document.createElement('div');
             el.className = 'mark-label';
             if (small) el.style.fontSize = '0.5rem';
-            el.innerHTML = m.word + '<span class="mark-tooltip">' + m.explanation + '</span>';
+            el.textContent = m.word;
+            var tip = document.createElement('span');
+            tip.className = 'mark-tooltip';
+            tip.textContent = m.explanation;
+            el.appendChild(tip);
             el.style.left = (m.label_x / 600 * 100) + '%';
             el.style.top = (m.label_y / 600 * 100) + '%';
             labelsEl.appendChild(el);
@@ -1147,13 +1169,22 @@ footer a:hover { color: var(--color-text-tertiary); }
     btnShare.addEventListener('click', function() {
         var encoded = encodeURIComponent(currentText);
         var url = location.origin + '/?t=' + encoded;
+        function showCopied() {
+            btnShare.textContent = 'copied';
+            setTimeout(function() { btnShare.textContent = 'share'; }, 1500);
+        }
         if (navigator.clipboard) {
-            navigator.clipboard.writeText(url).then(function() {
-                btnShare.textContent = 'copied';
-                setTimeout(function() { btnShare.textContent = 'share'; }, 1500);
-            });
+            navigator.clipboard.writeText(url).then(showCopied);
         } else {
-            prompt('Share this link:', url);
+            var ta = document.createElement('textarea');
+            ta.value = url;
+            ta.style.position = 'fixed';
+            ta.style.opacity = '0';
+            document.body.appendChild(ta);
+            ta.select();
+            document.execCommand('copy');
+            document.body.removeChild(ta);
+            showCopied();
         }
     });
 
@@ -1208,11 +1239,14 @@ footer a:hover { color: var(--color-text-tertiary); }
     function showIntro() {
         var overlay = document.createElement('div');
         overlay.className = 'intro-overlay';
+        overlay.setAttribute('role', 'dialog');
+        overlay.setAttribute('aria-label', 'Welcome to Torus');
         overlay.innerHTML =
             '<div class="intro-symbol" id="intro-symbol"></div>' +
             '<div class="intro-text">a language without beginning or end</div>' +
-            '<div class="intro-hint" id="intro-dismiss">begin</div>';
+            '<button class="intro-hint" id="intro-dismiss">begin</button>';
         document.body.appendChild(overlay);
+        document.getElementById('intro-dismiss').focus();
 
         // Generate the intro symbol
         fetch('/api/generate', {

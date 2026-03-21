@@ -231,8 +231,12 @@ fn detect_marks(dev: &[f64], width: &[f64], n: usize) -> Vec<DetectedMark> {
             let region_start = if best_idx > n / 20 { best_idx - n / 20 } else { 0 };
             let region_end = (best_idx + n / 20).min(n);
             let w_slice: Vec<f64> = (region_start..region_end).map(|k| width[k]).collect();
-            let w_mean: f64 = w_slice.iter().sum::<f64>() / w_slice.len() as f64;
-            let w_var: f64 = w_slice.iter().map(|w| (w - w_mean).powi(2)).sum::<f64>() / w_slice.len() as f64;
+            let w_var = if w_slice.is_empty() {
+                0.0
+            } else {
+                let w_mean: f64 = w_slice.iter().sum::<f64>() / w_slice.len() as f64;
+                w_slice.iter().map(|w| (w - w_mean).powi(2)).sum::<f64>() / w_slice.len() as f64
+            };
 
             marks.push(DetectedMark {
                 center_idx: best_idx,
@@ -424,6 +428,11 @@ fn search_candidates(
             scored.sort_by(|a, b| a.1.partial_cmp(&b.1).unwrap_or(std::cmp::Ordering::Equal));
             let top: Vec<&str> = scored.iter().take(10).map(|(w, _)| *w).collect();
             per_mark_candidates.push(top);
+        }
+
+        // Skip if any mark position has no candidates
+        if per_mark_candidates.iter().any(|c| c.is_empty()) {
+            return None;
         }
 
         // Try combinations (limited to keep it fast)
