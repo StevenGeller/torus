@@ -1,0 +1,15 @@
+[package]
+name = "torus"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+axum = { version = "0.8", features = ["multipart"] }
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "net"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+resvg = "0.47"
+
+[profile.release]
+opt-level = 3
+lto = true

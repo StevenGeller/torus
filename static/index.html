@@ -1,0 +1,1282 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="description" content="Torus — a circular logographic language without beginning or end. Encode meaning into form.">
+<meta name="author" content="Steven Geller">
+<meta property="og:title" content="Torus — A Language Without Beginning or End">
+<meta property="og:description" content="A semasiographic circular writing system. Encode meaning into form. No beginning. No end.">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://torus.steven-geller.com">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:creator" content="@steven_geller">
+<title>Torus</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><circle cx='50' cy='50' r='40' fill='none' stroke='%231a1a1a' stroke-width='8'/></svg>">
+<style>
+@font-face {
+    font-family: 'JetBrains Mono';
+    font-style: normal;
+    font-weight: 300 700;
+    font-display: swap;
+    src: url('https://www.steven-geller.com/static/fonts/jetbrains-mono-latin.woff2') format('woff2');
+}
+
+:root {
+    --color-bg: #fff;
+    --color-text-primary: #1a1a1a;
+    --color-text-secondary: #374151;
+    --color-text-tertiary: #666;
+    --color-text-muted: #767676;
+    --color-border: #e5e5e5;
+    --color-card-bg: #f9f9f9;
+    --torus-ink: #1a1a1a;
+    --torus-ink-dim: rgba(26, 26, 26, 0.08);
+    --font-mono: 'JetBrains Mono', 'SF Mono', 'Consolas', monospace;
+    --ease-smooth: cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+@media (prefers-color-scheme: dark) {
+    :root {
+        --color-bg: #181818;
+        --color-text-primary: #eee;
+        --color-text-secondary: #b8b8b8;
+        --color-text-tertiary: #888;
+        --color-text-muted: #888;
+        --color-border: #333;
+        --color-card-bg: #222;
+        --torus-ink: #d4cdc4;
+        --torus-ink-dim: rgba(212, 205, 196, 0.08);
+    }
+}
+
+*, *::before, *::after {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+::selection {
+    background: var(--color-text-primary);
+    color: var(--color-bg);
+}
+
+html { scroll-behavior: smooth; }
+
+body {
+    font-family: var(--font-mono);
+    font-size: 93.75%;
+    line-height: 1.6;
+    color: var(--color-text-primary);
+    background: var(--color-bg);
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+}
+
+@keyframes fadeIn {
+    from { opacity: 0; transform: translateY(10px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+/* ─── Header ─── */
+
+header {
+    max-width: 820px;
+    margin: 0 auto;
+    padding: 2rem 2rem 1.5rem;
+    text-align: center;
+    width: 100%;
+    animation: fadeIn 0.8s ease-out forwards;
+}
+
+header h1 {
+    font-size: 1.5rem;
+    font-weight: 500;
+    letter-spacing: -0.03em;
+    margin-bottom: 0.25rem;
+}
+
+header h1 a { color: inherit; text-decoration: none; }
+
+.subtitle {
+    font-size: 0.7rem;
+    color: var(--color-text-muted);
+    letter-spacing: 0.08em;
+    text-transform: lowercase;
+}
+
+/* ─── Main ─── */
+
+main {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    max-width: 820px;
+    margin: 0 auto;
+    padding: 0 2rem 3rem;
+    width: 100%;
+}
+
+/* ─── Symbol ─── */
+
+.symbol-container {
+    position: relative;
+    width: min(65vw, 65vh, 420px);
+    height: min(65vw, 65vh, 420px);
+    margin: 1rem 0 0.5rem;
+    animation: fadeIn 1s ease-out 0.2s both;
+}
+
+#symbol-canvas {
+    width: 100%;
+    height: 100%;
+}
+
+#symbol-canvas svg {
+    width: 100%;
+    height: 100%;
+}
+
+/* ─── Mark Labels ─── */
+
+.mark-label {
+    position: absolute;
+    font-size: 0.6rem;
+    color: var(--color-text-muted);
+    letter-spacing: 0.04em;
+    pointer-events: auto;
+    cursor: default;
+    padding: 2px 6px;
+    border-radius: 3px;
+    transition: all 0.2s var(--ease-smooth);
+    white-space: nowrap;
+    transform: translate(-50%, -50%);
+    opacity: 0;
+}
+
+.mark-label.visible { opacity: 1; }
+
+.mark-label:hover {
+    color: var(--color-text-primary);
+    background: var(--torus-ink-dim);
+}
+
+.mark-tooltip {
+    display: none;
+    position: absolute;
+    bottom: calc(100% + 6px);
+    left: 50%;
+    transform: translateX(-50%);
+    background: var(--color-card-bg);
+    border: 1px solid var(--color-border);
+    border-radius: 4px;
+    padding: 6px 10px;
+    font-size: 0.6rem;
+    color: var(--color-text-secondary);
+    white-space: nowrap;
+    z-index: 10;
+    pointer-events: none;
+}
+
+.mark-label:hover .mark-tooltip { display: block; }
+
+/* ─── Input ─── */
+
+.input-area {
+    width: 100%;
+    max-width: 400px;
+    margin: 1.5rem 0;
+    animation: fadeIn 0.8s ease-out 0.4s both;
+}
+
+#text-input {
+    width: 100%;
+    background: transparent;
+    border: none;
+    border-bottom: 1px solid var(--color-border);
+    color: var(--color-text-primary);
+    font-size: 0.85rem;
+    font-family: var(--font-mono);
+    padding: 0.6rem 0;
+    text-align: center;
+    outline: none;
+    letter-spacing: 0.02em;
+    transition: border-color 0.2s ease;
+}
+
+#text-input::placeholder {
+    color: var(--color-text-muted);
+    opacity: 0.6;
+}
+
+#text-input:focus { border-bottom-color: var(--color-text-muted); }
+
+/* ─── Explanation ─── */
+
+.explanation {
+    width: 100%;
+    max-width: 500px;
+    min-height: 40px;
+    margin: 0.5rem 0;
+    animation: fadeIn 0.8s ease-out 0.5s both;
+}
+
+.explanation-content {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 0.4rem;
+}
+
+.mark-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.3rem;
+    padding: 3px 8px;
+    border-radius: 3px;
+    font-size: 0.65rem;
+    color: var(--color-text-secondary);
+    background: var(--torus-ink-dim);
+    transition: all 0.15s ease;
+    cursor: default;
+}
+
+.mark-chip:hover { background: var(--color-border); }
+
+.mark-chip .chip-dot {
+    width: 5px;
+    height: 5px;
+    border-radius: 50%;
+    flex-shrink: 0;
+}
+
+.mark-chip[data-category="entity"] .chip-dot { background: #6b8f71; }
+.mark-chip[data-category="action"] .chip-dot { background: #8b6f6f; }
+.mark-chip[data-category="property"] .chip-dot { background: #6f7f8b; }
+.mark-chip[data-category="relation"] .chip-dot { background: #8b8b6f; }
+.mark-chip[data-category="particle"] .chip-dot { background: #7f6f8b; }
+.mark-chip[data-category="negation"] .chip-dot { background: #8b6f6f; }
+.mark-chip[data-category="question"] .chip-dot { background: #6f8b8b; }
+
+.chip-word { font-weight: 500; }
+.chip-type { color: var(--color-text-muted); font-size: 0.6rem; }
+
+/* ─── Actions ─── */
+
+.actions {
+    display: flex;
+    gap: 1rem;
+    align-items: center;
+    margin: 1rem 0;
+    animation: fadeIn 0.8s ease-out 0.6s both;
+}
+
+.action-btn {
+    background: none;
+    border: 1px solid var(--color-border);
+    color: var(--color-text-muted);
+    font-family: var(--font-mono);
+    font-size: 0.65rem;
+    letter-spacing: 0.04em;
+    padding: 6px 14px;
+    border-radius: 3px;
+    cursor: pointer;
+    transition: all 0.15s ease;
+}
+
+.action-btn:hover {
+    color: var(--color-text-primary);
+    border-color: var(--color-text-muted);
+}
+
+.upload-label {
+    display: inline-block;
+    color: var(--color-text-muted);
+    font-size: 0.65rem;
+    letter-spacing: 0.04em;
+    cursor: pointer;
+    padding: 5px 14px;
+    border: 1px dashed var(--color-border);
+    border-radius: 3px;
+    transition: all 0.15s ease;
+}
+
+.upload-label:hover {
+    color: var(--color-text-primary);
+    border-color: var(--color-text-muted);
+}
+
+#file-upload { display: none; }
+
+.decode-result {
+    margin-top: 0.5rem;
+    font-size: 0.7rem;
+    color: var(--color-text-secondary);
+    text-align: center;
+    min-height: 1em;
+}
+
+.decode-result.error { color: #8b6f6f; }
+
+/* ─── Legend ─── */
+
+.legend {
+    margin: 2rem 0 1rem;
+    padding-top: 1.5rem;
+    border-top: 1px solid var(--color-border);
+    width: 100%;
+    max-width: 500px;
+    animation: fadeIn 0.8s ease-out 0.7s both;
+}
+
+.legend h3 {
+    font-size: 0.7rem;
+    font-weight: 500;
+    color: var(--color-text-muted);
+    letter-spacing: 0.06em;
+    margin-bottom: 0.75rem;
+    text-align: center;
+}
+
+.legend-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 0.4rem 1.5rem;
+}
+
+.legend-item {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-size: 0.6rem;
+    color: var(--color-text-tertiary);
+}
+
+.legend-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    flex-shrink: 0;
+}
+
+.legend-item[data-cat="entity"] .legend-dot { background: #6b8f71; }
+.legend-item[data-cat="action"] .legend-dot { background: #8b6f6f; }
+.legend-item[data-cat="property"] .legend-dot { background: #6f7f8b; }
+.legend-item[data-cat="relation"] .legend-dot { background: #8b8b6f; }
+.legend-item[data-cat="particle"] .legend-dot { background: #7f6f8b; }
+.legend-item[data-cat="negation"] .legend-dot { background: #8b6f6f; }
+
+.philosophy {
+    margin-top: 1rem;
+    padding-top: 0.75rem;
+    border-top: 1px solid var(--color-border);
+    text-align: center;
+}
+
+.philosophy p {
+    font-size: 0.58rem;
+    color: var(--color-text-muted);
+    margin-bottom: 0.4rem;
+    line-height: 1.5;
+    opacity: 0.7;
+}
+
+.chip-aspect {
+    color: var(--color-text-muted);
+    font-size: 0.55rem;
+    font-style: italic;
+    opacity: 0.8;
+}
+
+.shuffle-proof {
+    text-align: center;
+    margin: 0.25rem 0;
+    animation: fadeIn 0.5s ease-out both;
+}
+
+.shuffle-msg {
+    font-size: 0.6rem;
+    color: var(--color-text-muted);
+    margin-left: 0.5rem;
+    opacity: 0.7;
+    transition: opacity 0.3s ease;
+}
+
+.primes-section {
+    width: 100%;
+    max-width: 500px;
+    margin: 0.25rem 0;
+    text-align: center;
+    animation: fadeIn 0.5s ease-out both;
+}
+
+.primes-label {
+    font-size: 0.55rem;
+    color: var(--color-text-muted);
+    letter-spacing: 0.08em;
+    margin-bottom: 0.3rem;
+    opacity: 0.5;
+}
+
+.primes-content {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 0.25rem;
+}
+
+.prime-tag {
+    font-size: 0.55rem;
+    color: var(--color-text-tertiary);
+    background: var(--torus-ink-dim);
+    padding: 1px 6px;
+    border-radius: 2px;
+    letter-spacing: 0.02em;
+}
+
+.intro-overlay {
+    position: fixed;
+    inset: 0;
+    background: var(--color-bg);
+    z-index: 100;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    opacity: 1;
+    transition: opacity 1.2s ease;
+}
+
+.intro-overlay.fade-out {
+    opacity: 0;
+    pointer-events: none;
+}
+
+.intro-symbol {
+    width: min(60vw, 60vh, 380px);
+    height: min(60vw, 60vh, 380px);
+    opacity: 0;
+    animation: introFadeIn 2s ease-out 0.3s forwards;
+}
+
+.intro-text {
+    font-size: 0.7rem;
+    color: var(--color-text-muted);
+    letter-spacing: 0.08em;
+    margin-top: 1.5rem;
+    opacity: 0;
+    animation: introFadeIn 1.5s ease-out 1.5s forwards;
+}
+
+.intro-hint {
+    font-size: 0.6rem;
+    color: var(--color-text-muted);
+    opacity: 0;
+    margin-top: 1rem;
+    animation: introFadeIn 1s ease-out 3s forwards;
+    cursor: pointer;
+}
+
+@keyframes introFadeIn {
+    from { opacity: 0; transform: translateY(8px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes breathe {
+    0%, 100% { transform: scale(1); }
+    50% { transform: scale(1.008); }
+}
+
+.symbol-container.idle #symbol-canvas {
+    animation: breathe 6s ease-in-out infinite;
+}
+
+.examples {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 0.3rem;
+    margin: 0.4rem 0;
+    animation: fadeIn 0.8s ease-out 0.5s both;
+}
+
+.example-btn {
+    background: none;
+    border: none;
+    color: var(--color-text-muted);
+    font-family: var(--font-mono);
+    font-size: 0.58rem;
+    cursor: pointer;
+    padding: 3px 8px;
+    border-radius: 3px;
+    transition: all 0.15s ease;
+    opacity: 0.5;
+}
+
+.example-btn:hover {
+    opacity: 1;
+    background: var(--torus-ink-dim);
+}
+
+@media (max-width: 600px) {
+    #symbol-canvas svg .ti-filter { display: none; }
+}
+
+footer {
+    text-align: center;
+    padding: 2rem;
+    font-size: 0.6rem;
+    color: var(--color-text-muted);
+    letter-spacing: 0.04em;
+}
+
+footer a {
+    color: var(--color-text-muted);
+    text-decoration: none;
+    border-bottom: 1px dotted var(--color-border);
+    transition: all 0.15s ease;
+}
+
+footer a:hover { color: var(--color-text-tertiary); }
+
+@media (max-width: 600px) {
+    header { padding: 1.5rem 1.5rem 1rem; }
+    main { padding: 0 1.5rem 2rem; }
+    .symbol-container {
+        width: min(80vw, 80vh, 350px);
+        height: min(80vw, 80vh, 350px);
+    }
+    .legend-grid { grid-template-columns: 1fr; }
+}
+</style>
+</head>
+<body>
+
+<header>
+    <h1><a href="/">Torus</a></h1>
+    <p class="subtitle">a language without beginning or end</p>
+</header>
+
+<main>
+    <div class="symbol-container">
+        <div id="symbol-canvas"></div>
+        <div id="mark-labels"></div>
+    </div>
+
+    <div class="input-area">
+        <input type="text" id="text-input" placeholder="type to encode" autocomplete="off" autofocus spellcheck="false" aria-label="Enter text to encode as a circular symbol">
+    </div>
+
+    <div class="examples">
+        <button class="example-btn" data-text="time is a circle">time is a circle</button>
+        <button class="example-btn" data-text="I dream of infinite space">I dream of infinite space</button>
+        <button class="example-btn" data-text="where is my home?">where is my home?</button>
+        <button class="example-btn" data-text="love">love</button>
+        <button class="example-btn" data-text="the world is not what it seems">the world is not what it seems</button>
+        <button class="example-btn" data-text="consciousness">consciousness</button>
+    </div>
+
+    <div id="shuffle-proof" class="shuffle-proof" style="display:none">
+        <button class="action-btn" id="btn-shuffle" title="Rearrange words — the symbol stays the same" aria-label="Shuffle words to prove order independence">shuffle words</button>
+        <span id="shuffle-msg" class="shuffle-msg"></span>
+    </div>
+
+    <div class="explanation">
+        <div id="explanation-content" class="explanation-content"></div>
+    </div>
+
+    <div id="primes-section" class="primes-section" style="display:none">
+        <div class="primes-label">semantic primes</div>
+        <div id="primes-content" class="primes-content"></div>
+    </div>
+
+    <div class="actions">
+        <button class="action-btn" id="btn-sound" title="Play the symbol's sound (or press Space)" aria-label="Play sound">sound</button>
+        <button class="action-btn" id="btn-download" title="Download as SVG" aria-label="Download SVG">svg</button>
+        <button class="action-btn" id="btn-png" title="Download as PNG image" aria-label="Download PNG">png</button>
+        <button class="action-btn" id="btn-share" title="Copy shareable link" aria-label="Share link">share</button>
+        <label class="upload-label" for="file-upload" title="Upload a Torus SVG to decode it" aria-label="Upload and decode symbol">decode</label>
+        <input type="file" id="file-upload" accept=".svg" aria-label="Upload SVG file">
+    </div>
+    <div id="decode-result" class="decode-result"></div>
+
+    <div class="legend">
+        <h3>reading the marks</h3>
+        <div class="legend-grid">
+            <div class="legend-item" data-cat="entity"><span class="legend-dot"></span> entity — outward tendril</div>
+            <div class="legend-item" data-cat="action"><span class="legend-dot"></span> action — width wave</div>
+            <div class="legend-item" data-cat="property"><span class="legend-dot"></span> property — inner ripple</div>
+            <div class="legend-item" data-cat="relation"><span class="legend-dot"></span> relation — bridge</div>
+            <div class="legend-item" data-cat="particle"><span class="legend-dot"></span> particle — notch</div>
+            <div class="legend-item" data-cat="negation"><span class="legend-dot"></span> negation — inward void</div>
+        </div>
+        <div class="philosophy">
+            <p>Torus is semasiographic — it encodes meaning directly, not speech sounds. The same semantic relationships in any word order produce the same symbol.</p>
+            <p>"Dog bites man" and "man bites dog" produce different symbols because the agent and patient roles differ. But rearranging words without changing who-does-what-to-whom preserves the symbol.</p>
+            <p>Actions carry no tense. Only aspect: timeless, unbounded, or bounded. Modifiers attach to specific words. Start reading anywhere.</p>
+        </div>
+    </div>
+</main>
+
+<footer>
+    <a href="https://www.steven-geller.com">steven-geller.com</a>
+</footer>
+
+<script>
+(function() {
+    'use strict';
+
+    var canvas = document.getElementById('symbol-canvas');
+    var labelsEl = document.getElementById('mark-labels');
+    var explanationEl = document.getElementById('explanation-content');
+    var textInput = document.getElementById('text-input');
+    var btnDownload = document.getElementById('btn-download');
+    var btnPng = document.getElementById('btn-png');
+    var btnShare = document.getElementById('btn-share');
+    var symbolContainer = document.querySelector('.symbol-container');
+    var isMobile = window.innerWidth < 600;
+    var fileUpload = document.getElementById('file-upload');
+    var decodeResult = document.getElementById('decode-result');
+    var shuffleProof = document.getElementById('shuffle-proof');
+    var btnShuffle = document.getElementById('btn-shuffle');
+    var shuffleMsg = document.getElementById('shuffle-msg');
+    var primesSection = document.getElementById('primes-section');
+    var primesContent = document.getElementById('primes-content');
+
+    var currentOuter = null;
+    var currentInner = null;
+    var targetOuter = null;
+    var targetInner = null;
+    var currentDots = [];
+    var currentExtras = '';
+    var animFrame = null;
+    var currentText = '';
+    var currentSvg = '';
+    var debounceTimer = null;
+    var audioCtx = null;
+    var soundPlaying = false;
+    var soundNodes = [];
+
+    // ─── SVG from points ───
+
+    function renderFromPoints(outer, inner, dots, extras) {
+        let d = 'M' + outer[0][0].toFixed(1) + ',' + outer[0][1].toFixed(1);
+        for (let i = 1; i < outer.length; i++) {
+            d += 'L' + outer[i][0].toFixed(1) + ',' + outer[i][1].toFixed(1);
+        }
+        d += 'Z';
+        d += 'M' + inner[0][0].toFixed(1) + ',' + inner[0][1].toFixed(1);
+        for (let i = 1; i < inner.length; i++) {
+            d += 'L' + inner[i][0].toFixed(1) + ',' + inner[i][1].toFixed(1);
+        }
+        d += 'Z';
+
+        var dotSvg = '';
+        if (dots) {
+            dots.forEach(function(dot) {
+                dotSvg += '<circle cx="' + dot[0].toFixed(1) + '" cy="' + dot[1].toFixed(1) + '" r="' + dot[2].toFixed(1) + '"/>';
+            });
+        }
+
+        var filter = isMobile ?
+            '<defs><filter id="ti" x="-2%" y="-2%" width="104%" height="104%">' +
+            '<feGaussianBlur in="SourceGraphic" stdDeviation="0.3" result="s"/>' +
+            '<feGaussianBlur in="s" stdDeviation="2" result="g"/>' +
+            '<feColorMatrix in="g" type="matrix" values="1 0 0 0 0 0 1 0 0 0 0 0 1 0 0 0 0 0 0.06 0" result="dg"/>' +
+            '<feMerge><feMergeNode in="dg"/><feMergeNode in="s"/></feMerge>' +
+            '</filter></defs>' :
+            '<defs><filter id="ti" x="-3%" y="-3%" width="106%" height="106%">' +
+            '<feTurbulence type="fractalNoise" baseFrequency="0.025" numOctaves="5" seed="42" result="n"/>' +
+            '<feDisplacementMap in="SourceGraphic" in2="n" scale="2.2" xChannelSelector="R" yChannelSelector="G" result="r"/>' +
+            '<feGaussianBlur in="r" stdDeviation="0.15" result="s"/>' +
+            '<feGaussianBlur in="s" stdDeviation="2" result="g"/>' +
+            '<feColorMatrix in="g" type="matrix" values="1 0 0 0 0 0 1 0 0 0 0 0 1 0 0 0 0 0 0.06 0" result="dg"/>' +
+            '<feMerge><feMergeNode in="dg"/><feMergeNode in="s"/></feMerge>' +
+            '</filter></defs>';
+
+        canvas.innerHTML =
+            '<svg viewBox="0 0 600 600" xmlns="http://www.w3.org/2000/svg">' +
+            filter +
+            '<g fill="var(--torus-ink,#1a1a1a)" filter="url(#ti)">' +
+            '<path d="' + d + '" fill-rule="evenodd"/>' +
+            dotSvg +
+            (extras || '') +
+            '</g></svg>';
+    }
+
+    // ─── Smooth morph ───
+
+    function lerp(a, b, t) { return a + (b - a) * t; }
+
+    function ease(t) {
+        return t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
+    }
+
+    function morphTo(newOuter, newInner, dots, extras) {
+        currentDots = dots || [];
+        currentExtras = extras || '';
+        if (!currentOuter) {
+            currentOuter = newOuter;
+            currentInner = newInner;
+            renderFromPoints(currentOuter, currentInner, currentDots, currentExtras);
+            return;
+        }
+
+        const fromO = currentOuter.map(function(p) { return [p[0], p[1]]; });
+        const fromI = currentInner.map(function(p) { return [p[0], p[1]]; });
+        targetOuter = newOuter;
+        targetInner = newInner;
+
+        if (animFrame) cancelAnimationFrame(animFrame);
+
+        const dur = 400;
+        const t0 = performance.now();
+
+        function step(now) {
+            var raw = Math.min((now - t0) / dur, 1);
+            var t = ease(raw);
+            var len = Math.min(fromO.length, targetOuter.length);
+            var o = new Array(len);
+            var n = new Array(len);
+            for (var i = 0; i < len; i++) {
+                o[i] = [lerp(fromO[i][0], targetOuter[i][0], t),
+                        lerp(fromO[i][1], targetOuter[i][1], t)];
+                n[i] = [lerp(fromI[i][0], targetInner[i][0], t),
+                        lerp(fromI[i][1], targetInner[i][1], t)];
+            }
+            currentOuter = o;
+            currentInner = n;
+            renderFromPoints(o, n, currentDots, currentExtras);
+
+            if (raw < 1) {
+                animFrame = requestAnimationFrame(step);
+            } else {
+                animFrame = null;
+            }
+        }
+
+        animFrame = requestAnimationFrame(step);
+    }
+
+    // ─── Labels ───
+
+    function updateLabels(marks) {
+        labelsEl.innerHTML = '';
+        var visible = marks.filter(function(m) { return m.category !== 'question'; });
+        // Limit labels to avoid overlap
+        var maxLabels = 8;
+        var shown = visible.slice(0, maxLabels);
+        var small = shown.length > 5;
+        shown.forEach(function(m, i) {
+            var el = document.createElement('div');
+            el.className = 'mark-label';
+            if (small) el.style.fontSize = '0.5rem';
+            el.innerHTML = m.word + '<span class="mark-tooltip">' + m.explanation + '</span>';
+            el.style.left = (m.label_x / 600 * 100) + '%';
+            el.style.top = (m.label_y / 600 * 100) + '%';
+            labelsEl.appendChild(el);
+            setTimeout(function() { el.classList.add('visible'); }, 150 + i * 80);
+        });
+    }
+
+    // ─── Explanation chips ───
+
+    function updateExplanation(marks) {
+        if (marks.length === 0) {
+            explanationEl.innerHTML = '<span style="font-size:0.65rem;color:var(--color-text-muted);opacity:0.5">the empty circle — pure form, no meaning yet</span>';
+            return;
+        }
+        var html = '';
+        marks.forEach(function(m) {
+            if (m.category === 'question') return;
+            var aspect = (m.category === 'action' && m.aspect && m.aspect !== 'timeless')
+                ? ' <span class="chip-aspect">' + m.aspect + '</span>' : '';
+            var role = (m.role && m.role !== 'unmarked' && m.role !== 'action')
+                ? ' <span class="chip-aspect">' + m.role + '</span>' : '';
+            html += '<span class="mark-chip" data-category="' + m.category + '">' +
+                '<span class="chip-dot"></span>' +
+                '<span class="chip-word">' + m.word + '</span>' +
+                '<span class="chip-type">' + m.feature + '</span>' +
+                role + aspect +
+                '</span>';
+        });
+        explanationEl.innerHTML = html;
+    }
+
+    // ─── Sound: deep drone ───
+    // Deep bass drones, slow evolving harmonics, whale-like
+    // pitch bends, filtered noise for breathiness. Everything
+    // swells over seconds, not milliseconds.
+
+    var btnSound = document.getElementById('btn-sound');
+    var currentMarks = [];
+
+    function wordHash01(word) {
+        var h = 0;
+        for (var i = 0; i < word.length; i++) {
+            h = ((h << 5) - h) + word.charCodeAt(i);
+            h |= 0;
+        }
+        return Math.abs(h % 10000) / 10000;
+    }
+
+    function stopSound() {
+        soundNodes.forEach(function(n) { try { n.stop(); } catch(e) {} });
+        soundNodes = [];
+        soundPlaying = false;
+        btnSound.textContent = 'sound';
+    }
+
+    function playSound(marks) {
+        if (soundPlaying) { stopSound(); return; }
+        if (!audioCtx) {
+            try { audioCtx = new (window.AudioContext || window.webkitAudioContext)(); }
+            catch(e) { return; }
+        }
+        if (audioCtx.state === 'suspended') audioCtx.resume();
+        soundNodes = [];
+        soundPlaying = true;
+
+        var now = audioCtx.currentTime;
+        var dur = 5.0;
+        var contentMarks = marks.filter(function(m) { return m.category !== 'question'; });
+        var n = contentMarks.length;
+
+        // Compressor prevents clipping when many marks stack
+        var compressor = audioCtx.createDynamicsCompressor();
+        compressor.threshold.value = -6;
+        compressor.knee.value = 10;
+        compressor.ratio.value = 4;
+        compressor.attack.value = 0.01;
+        compressor.release.value = 0.3;
+        compressor.connect(audioCtx.destination);
+
+        // Master gain
+        var master = audioCtx.createGain();
+        master.gain.value = 1.0;
+        master.connect(compressor);
+
+        // === 1. Deep bass drone — the foundation ===
+        // Sub-bass rumble — felt more than heard
+        var droneFreq = 42 + (n > 0 ? wordHash01(contentMarks[0].word) * 10 : 0);
+        var drone1 = audioCtx.createOscillator();
+        var drone2 = audioCtx.createOscillator();
+        drone1.type = 'sine';
+        drone2.type = 'sine';
+        drone1.frequency.setValueAtTime(droneFreq, now);
+        drone2.frequency.setValueAtTime(droneFreq * 1.002, now); // slight detune
+        drone1.frequency.linearRampToValueAtTime(droneFreq * 0.97, now + dur);
+        drone2.frequency.linearRampToValueAtTime(droneFreq * 0.967, now + dur);
+
+        var droneGain = audioCtx.createGain();
+        droneGain.gain.setValueAtTime(0, now);
+        droneGain.gain.linearRampToValueAtTime(0.25, now + 1.8);
+        droneGain.gain.setValueAtTime(0.20, now + 3.5);
+        droneGain.gain.exponentialRampToValueAtTime(0.001, now + dur);
+
+        drone1.connect(droneGain);
+        drone2.connect(droneGain);
+        droneGain.connect(master);
+        drone1.start(now);
+        drone2.start(now);
+        drone1.stop(now + dur + 1);
+        drone2.stop(now + dur + 1);
+        soundNodes.push(drone1, drone2);
+
+        // === 2. Sub-harmonic pulse — felt more than heard ===
+        var sub = audioCtx.createOscillator();
+        sub.type = 'sine';
+        sub.frequency.value = droneFreq / 2; // ~21Hz, subsonic
+        var subGain = audioCtx.createGain();
+        subGain.gain.setValueAtTime(0, now);
+        subGain.gain.linearRampToValueAtTime(0.15, now + 2.0);
+        subGain.gain.exponentialRampToValueAtTime(0.001, now + dur);
+        sub.connect(subGain);
+        subGain.connect(master);
+        sub.start(now);
+        sub.stop(now + dur + 1);
+        soundNodes.push(sub);
+
+        // === 3. Harmonic layers from marks ===
+        // Each mark contributes a tone — detuned pairs, slow swells,
+        // whale-like pitch bends. Staggered entries.
+        contentMarks.forEach(function(m, i) {
+            var wh = wordHash01(m.word);
+            var freq, overtone;
+
+            if (m.category === 'entity') {
+                freq = 75 + wh * 45;      // 75-120Hz
+                overtone = freq * 3;       // 3rd harmonic
+            } else if (m.category === 'action') {
+                freq = 95 + wh * 35;       // 95-130Hz
+                overtone = freq * 2;       // octave
+            } else if (m.category === 'property') {
+                freq = 140 + wh * 60;      // 140-200Hz
+                overtone = freq * 2.5;     // between octave and 3rd
+            } else if (m.category === 'negation') {
+                freq = 55 + wh * 20;       // 55-75Hz, very low
+                overtone = freq * 5;       // 5th harmonic (eerie)
+            } else {
+                freq = 90 + wh * 40;
+                overtone = freq * 2;
+            }
+
+            // Fundamental pair (detuned for thickness)
+            var osc1 = audioCtx.createOscillator();
+            var osc2 = audioCtx.createOscillator();
+            osc1.type = 'sine';
+            osc2.type = 'sine';
+            osc1.frequency.setValueAtTime(freq, now);
+            osc2.frequency.setValueAtTime(freq * 1.004, now);
+            // Slow whale-like pitch bend
+            var bendTarget = freq * (0.96 + wh * 0.04);
+            osc1.frequency.linearRampToValueAtTime(bendTarget, now + dur);
+            osc2.frequency.linearRampToValueAtTime(bendTarget * 1.004, now + dur);
+
+            // Quiet overtone (adds shimmer)
+            var osc3 = audioCtx.createOscillator();
+            osc3.type = 'sine';
+            osc3.frequency.setValueAtTime(overtone, now);
+            osc3.frequency.linearRampToValueAtTime(overtone * 0.97, now + dur);
+
+            var markGain = audioCtx.createGain();
+            var overtoneGain = audioCtx.createGain();
+            var entry = 0.5 + i * 0.5; // staggered entries, 0.5s apart
+
+            markGain.gain.setValueAtTime(0, now);
+            markGain.gain.linearRampToValueAtTime(0.08, now + entry + 1.2);
+            markGain.gain.setValueAtTime(0.06, now + entry + 2.5);
+            markGain.gain.exponentialRampToValueAtTime(0.001, now + dur);
+
+            overtoneGain.gain.setValueAtTime(0, now);
+            overtoneGain.gain.linearRampToValueAtTime(0.02, now + entry + 1.5);
+            overtoneGain.gain.exponentialRampToValueAtTime(0.001, now + dur);
+
+            osc1.connect(markGain);
+            osc2.connect(markGain);
+            markGain.connect(master);
+            osc3.connect(overtoneGain);
+            overtoneGain.connect(master);
+
+            osc1.start(now + entry * 0.5);
+            osc2.start(now + entry * 0.5);
+            osc3.start(now + entry * 0.7);
+            osc1.stop(now + dur + 1);
+            osc2.stop(now + dur + 1);
+            osc3.stop(now + dur + 1);
+            soundNodes.push(osc1, osc2, osc3);
+        });
+
+        // === 4. Breath layer — filtered noise ===
+        // The "air" quality, like sound through a vast chamber
+        var bufLen = Math.floor(audioCtx.sampleRate * (dur + 1));
+        var noiseBuf = audioCtx.createBuffer(1, bufLen, audioCtx.sampleRate);
+        var noiseData = noiseBuf.getChannelData(0);
+        for (var j = 0; j < bufLen; j++) {
+            noiseData[j] = Math.random() * 2 - 1;
+        }
+        var noise = audioCtx.createBufferSource();
+        noise.buffer = noiseBuf;
+
+        var bp = audioCtx.createBiquadFilter();
+        bp.type = 'bandpass';
+        bp.frequency.setValueAtTime(150, now);
+        bp.frequency.linearRampToValueAtTime(100, now + dur);
+        bp.Q.value = 1.5;
+
+        var noiseGain = audioCtx.createGain();
+        noiseGain.gain.setValueAtTime(0, now);
+        noiseGain.gain.linearRampToValueAtTime(0.03, now + 1.5);
+        noiseGain.gain.setValueAtTime(0.02, now + 3.5);
+        noiseGain.gain.exponentialRampToValueAtTime(0.001, now + dur);
+
+        noise.connect(bp);
+        bp.connect(noiseGain);
+        noiseGain.connect(master);
+        noise.start(now + 0.2);
+        noise.stop(now + dur + 1);
+        soundNodes.push(noise);
+
+        btnSound.textContent = 'stop';
+        setTimeout(function() {
+            soundPlaying = false;
+            soundNodes = [];
+            btnSound.textContent = 'sound';
+        }, (dur + 1) * 1000);
+    }
+
+    // ─── Primes display ───
+
+    function updatePrimes(primes) {
+        if (!primes || primes.length === 0) {
+            primesSection.style.display = 'none';
+            return;
+        }
+        var seen = {};
+        var tags = '';
+        primes.forEach(function(pg) {
+            pg.primes.forEach(function(p) {
+                if (!seen[p.prime]) {
+                    seen[p.prime] = true;
+                    tags += '<span class="prime-tag">' + p.prime + '</span>';
+                }
+            });
+        });
+        if (tags) {
+            primesContent.innerHTML = tags;
+            primesSection.style.display = '';
+        } else {
+            primesSection.style.display = 'none';
+        }
+    }
+
+    // ─── Shuffle proof ───
+
+    function shuffleWords(text) {
+        var words = text.trim().split(/\s+/);
+        for (var i = words.length - 1; i > 0; i--) {
+            var j = Math.floor(Math.random() * (i + 1));
+            var tmp = words[i]; words[i] = words[j]; words[j] = tmp;
+        }
+        return words.join(' ');
+    }
+
+    // ─── Generate ───
+
+    function generate(text, skipSound) {
+        return fetch('/api/generate', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ text: text })
+        })
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+            currentText = text;
+            currentSvg = data.svg;
+            morphTo(data.outer, data.inner, data.dots, data.extras);
+            updateLabels(data.marks);
+            updateExplanation(data.marks);
+            updatePrimes(data.primes);
+
+            // Show shuffle button when 2+ words
+            var wordCount = text.trim().split(/\s+/).filter(function(w) { return w.length > 0; }).length;
+            shuffleProof.style.display = wordCount >= 2 ? '' : 'none';
+
+            currentMarks = data.marks;
+        })
+        .catch(function(e) { console.error('Generate error:', e); });
+    }
+
+    // ─── Idle animation ───
+
+    var idleTimer = null;
+    function startIdle() {
+        clearTimeout(idleTimer);
+        symbolContainer.classList.remove('idle');
+        idleTimer = setTimeout(function() {
+            symbolContainer.classList.add('idle');
+        }, 2000);
+    }
+
+    // ─── Input ───
+
+    textInput.addEventListener('input', function() {
+        clearTimeout(debounceTimer);
+        startIdle();
+        debounceTimer = setTimeout(function() {
+            generate(textInput.value);
+        }, 200);
+    });
+
+    // ─── Example phrases ───
+
+    document.querySelectorAll('.example-btn').forEach(function(btn) {
+        btn.addEventListener('click', function() {
+            var text = btn.getAttribute('data-text');
+            textInput.value = text;
+            generate(text);
+            startIdle();
+        });
+    });
+
+    // ─── Download SVG ───
+
+    btnDownload.addEventListener('click', function() {
+        fetch('/api/generate-svg', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ text: currentText })
+        })
+        .then(function(r) { return r.blob(); })
+        .then(function(blob) {
+            var url = URL.createObjectURL(blob);
+            var a = document.createElement('a');
+            a.href = url;
+            a.download = 'torus-symbol.svg';
+            a.click();
+            URL.revokeObjectURL(url);
+        });
+    });
+
+    // ─── Download PNG ───
+
+    btnPng.addEventListener('click', function() {
+        var encoded = encodeURIComponent(currentText || ' ');
+        var a = document.createElement('a');
+        a.href = '/png/' + encoded;
+        a.download = 'torus-symbol.png';
+        a.click();
+    });
+
+    // ─── Sound replay ───
+
+    btnSound.addEventListener('click', function() {
+        if (currentMarks.length > 0) {
+            playSound(currentMarks);
+        } else {
+            playSound([]);
+        }
+    });
+
+    // ─── Share ───
+
+    btnShare.addEventListener('click', function() {
+        var encoded = encodeURIComponent(currentText);
+        var url = location.origin + '/?t=' + encoded;
+        if (navigator.clipboard) {
+            navigator.clipboard.writeText(url).then(function() {
+                btnShare.textContent = 'copied';
+                setTimeout(function() { btnShare.textContent = 'share'; }, 1500);
+            });
+        } else {
+            prompt('Share this link:', url);
+        }
+    });
+
+    // ─── Decode upload ───
+
+    fileUpload.addEventListener('change', function(e) {
+        var file = e.target.files[0];
+        if (!file) return;
+        var fd = new FormData();
+        fd.append('file', file);
+        fetch('/api/decode', { method: 'POST', body: fd })
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+            if (data.success) {
+                decodeResult.className = 'decode-result';
+                decodeResult.textContent = 'decoded by visual geometry: "' + data.text + '"';
+                textInput.value = data.text;
+                generate(data.text);
+            } else {
+                decodeResult.className = 'decode-result error';
+                decodeResult.textContent = data.error || 'Could not decode';
+            }
+        })
+        .catch(function() {
+            decodeResult.className = 'decode-result error';
+            decodeResult.textContent = 'Upload failed';
+        });
+        fileUpload.value = '';
+    });
+
+    // ─── Shuffle button ───
+
+    btnShuffle.addEventListener('click', function() {
+        var original = textInput.value.trim();
+        if (!original) return;
+        var prevSvg = currentSvg;
+        var shuffled = shuffleWords(original);
+        textInput.value = shuffled;
+        generate(shuffled).then(function() {
+            if (currentSvg === prevSvg) {
+                shuffleMsg.textContent = 'same symbol \u{2014} no beginning, no end';
+            } else {
+                shuffleMsg.textContent = 'different symbol \u{2014} word order changed meaning';
+            }
+            shuffleMsg.style.opacity = '1';
+            setTimeout(function() { shuffleMsg.style.opacity = '0.4'; }, 2500);
+        });
+    });
+
+    // ─── Intro experience ───
+
+    function showIntro() {
+        var overlay = document.createElement('div');
+        overlay.className = 'intro-overlay';
+        overlay.innerHTML =
+            '<div class="intro-symbol" id="intro-symbol"></div>' +
+            '<div class="intro-text">a language without beginning or end</div>' +
+            '<div class="intro-hint" id="intro-dismiss">begin</div>';
+        document.body.appendChild(overlay);
+
+        // Generate the intro symbol
+        fetch('/api/generate', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ text: 'time has no beginning and no end' })
+        })
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+            var el = document.getElementById('intro-symbol');
+            if (el) el.innerHTML = data.svg;
+            introMarks = data.marks;
+        });
+
+        var introMarks = null;
+
+        function dismiss() {
+            overlay.classList.add('fade-out');
+            setTimeout(function() {
+                overlay.remove();
+                textInput.focus();
+            }, 1200);
+            generate('', true);
+            // Play the drone on first interaction
+            if (introMarks) playSound(introMarks);
+        }
+
+        document.getElementById('intro-dismiss').addEventListener('click', dismiss);
+        // Also dismiss on any key press
+        function onKey(e) {
+            if (e.key === 'Escape' || e.key === 'Enter' || e.key === ' ') {
+                dismiss();
+                document.removeEventListener('keydown', onKey);
+            }
+        }
+        document.addEventListener('keydown', onKey);
+
+        // Auto-dismiss after 6 seconds
+        setTimeout(function() {
+            if (document.querySelector('.intro-overlay:not(.fade-out)')) dismiss();
+            document.removeEventListener('keydown', onKey);
+        }, 6000);
+    }
+
+    // ─── Init ───
+
+    var params = new URLSearchParams(location.search);
+    var t = params.get('t');
+    // ─── Keyboard shortcut: Space plays sound when not typing ───
+    document.addEventListener('keydown', function(e) {
+        if (e.code === 'Space' && document.activeElement !== textInput) {
+            e.preventDefault();
+            if (currentMarks.length > 0) playSound(currentMarks);
+        }
+    });
+
+    if (t) {
+        textInput.value = t;
+        generate(t, true);
+        startIdle();
+    } else {
+        showIntro();
+    }
+})();
+</script>
+</body>
+</html>

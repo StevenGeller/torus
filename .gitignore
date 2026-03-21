@@ -1,0 +1,17 @@
+# Build artifacts
+/target/
+
+# Runtime data
+access.log
+symbols.db
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
