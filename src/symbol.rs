@@ -1,5 +1,7 @@
+use crate::language::{
+    self, derive_hash, hash_to_float, word_hash, Aspect, CategorizedWord, Category, Role,
+};
 use std::f64::consts::{PI, TAU};
-use crate::language::{self, Category, Aspect, Role, CategorizedWord, hash_to_float, derive_hash, word_hash};
 
 const N: usize = 720;
 const CX: f64 = 300.0;
@@ -65,19 +67,31 @@ fn fbm(theta: f64, seed: u64) -> f64 {
 
 fn adist(a: f64, b: f64) -> f64 {
     let d = ((a - b) % TAU + TAU) % TAU;
-    if d > PI { TAU - d } else { d }
+    if d > PI {
+        TAU - d
+    } else {
+        d
+    }
 }
 
 fn signed_angle(theta: f64, ref_a: f64) -> f64 {
     let d = ((theta - ref_a) % TAU + TAU) % TAU;
-    if d > PI { d - TAU } else { d }
+    if d > PI {
+        d - TAU
+    } else {
+        d
+    }
 }
 
-fn rd(v: f64) -> f64 { (v * 100.0).round() / 100.0 }
+fn rd(v: f64) -> f64 {
+    (v * 100.0).round() / 100.0
+}
 
 /// Scale extras SVG by wrapping in a transform group
 fn scale_extras_svg(extras: &str, cx: f64, cy: f64, scale: f64) -> String {
-    if extras.is_empty() { return String::new(); }
+    if extras.is_empty() {
+        return String::new();
+    }
     let tx = CX - cx * scale;
     let ty = CY - cy * scale;
     format!(
@@ -91,15 +105,22 @@ fn scale_extras_svg(extras: &str, cx: f64, cy: f64, scale: f64) -> String {
 // "time is a circle" and "a circle is time" produce the SAME symbol.
 // This makes the circle genuinely without beginning or end.
 
-struct WM { word: CategorizedWord, angle: f64, arc: f64 }
+struct WM {
+    word: CategorizedWord,
+    angle: f64,
+    arc: f64,
+}
 
 fn layout(words: &[CategorizedWord]) -> Vec<WM> {
-    let mut cw: Vec<CategorizedWord> = words.iter()
+    let mut cw: Vec<CategorizedWord> = words
+        .iter()
         .filter(|w| w.category != Category::Question)
         .cloned()
         .collect();
 
-    if cw.is_empty() { return Vec::new(); }
+    if cw.is_empty() {
+        return Vec::new();
+    }
 
     // Sort by category priority, then by word hash — NOT input order.
     cw.sort_by(|a, b| {
@@ -117,7 +138,8 @@ fn layout(words: &[CategorizedWord]) -> Vec<WM> {
     // Rotation determined by CONTENT + ROLES, not input order.
     // "dog bites man" and "man bites dog" now produce DIFFERENT symbols
     // because the role assignments differ (agent/patient swap).
-    let mut sorted_words: Vec<String> = cw.iter()
+    let mut sorted_words: Vec<String> = cw
+        .iter()
         .map(|w| format!("{}:{}", w.word.to_lowercase(), w.role.tag()))
         .collect();
     // Also include modifier attachment pairs
@@ -126,7 +148,11 @@ fn layout(words: &[CategorizedWord]) -> Vec<WM> {
             // Find the target word in the original word list
             // For the hash, encode the modifier-head relationship
             if mod_idx < cw.len() {
-                sorted_words.push(format!("{}~{}", w.word.to_lowercase(), cw[mod_idx].word.to_lowercase()));
+                sorted_words.push(format!(
+                    "{}~{}",
+                    w.word.to_lowercase(),
+                    cw[mod_idx].word.to_lowercase()
+                ));
             }
         }
     }
@@ -134,11 +160,14 @@ fn layout(words: &[CategorizedWord]) -> Vec<WM> {
     let content_hash = language::fnv1a(sorted_words.join("\0").as_bytes());
     let base_rot = hash_to_float(content_hash) * TAU;
 
-    cw.into_iter().enumerate().map(|(i, w)| WM {
-        word: w,
-        angle: base_rot + arc * i as f64 + arc / 2.0,
-        arc,
-    }).collect()
+    cw.into_iter()
+        .enumerate()
+        .map(|(i, w)| WM {
+            word: w,
+            angle: base_rot + arc * i as f64 + arc / 2.0,
+            arc,
+        })
+        .collect()
 }
 
 // ═════════════════════════════════════════════════════════════════
@@ -157,7 +186,8 @@ pub fn generate(text: &str) -> SymbolData {
     let fh = if wl.is_empty() {
         42u64
     } else {
-        let mut sorted: Vec<String> = wl.iter()
+        let mut sorted: Vec<String> = wl
+            .iter()
             .map(|w| format!("{}:{}", w.word.word.to_lowercase(), w.word.role.tag()))
             .collect();
         sorted.sort();
@@ -171,13 +201,20 @@ pub fn generate(text: &str) -> SymbolData {
     let n_press = 2 + (hash_to_float(derive_hash(fh, 20)) > 0.55) as usize;
     let base_angle = hash_to_float(fh) * TAU;
 
-    struct PZ { center: f64, sigma: f64, intensity: f64 }
-    let presses: Vec<PZ> = (0..n_press).map(|p| PZ {
-        center: base_angle + TAU * p as f64 / n_press as f64
-            + (hash_to_float(derive_hash(fh, 22 + p as u64)) - 0.5) * 0.5,
-        sigma: 0.20 + hash_to_float(derive_hash(fh, 25 + p as u64)) * 0.40,
-        intensity: 0.8 + hash_to_float(derive_hash(fh, 28 + p as u64)) * 0.2,
-    }).collect();
+    struct PZ {
+        center: f64,
+        sigma: f64,
+        intensity: f64,
+    }
+    let presses: Vec<PZ> = (0..n_press)
+        .map(|p| PZ {
+            center: base_angle
+                + TAU * p as f64 / n_press as f64
+                + (hash_to_float(derive_hash(fh, 22 + p as u64)) - 0.5) * 0.5,
+            sigma: 0.20 + hash_to_float(derive_hash(fh, 25 + p as u64)) * 0.40,
+            intensity: 0.8 + hash_to_float(derive_hash(fh, 28 + p as u64)) * 0.2,
+        })
+        .collect();
 
     for i in 0..N {
         let t = TAU * i as f64 / N as f64;
@@ -231,7 +268,8 @@ pub fn generate(text: &str) -> SymbolData {
             category: wm.word.category,
             aspect: wm.word.aspect,
             role: wm.word.role,
-            angle: wm.angle, arc: wm.arc,
+            angle: wm.angle,
+            arc: wm.arc,
             feature: feature.to_string(),
             explanation,
             label_x: CX + lr * wm.angle.cos(),
@@ -297,8 +335,10 @@ pub fn generate(text: &str) -> SymbolData {
     let mut all_x: Vec<f64> = outer.iter().chain(inner.iter()).map(|p| p[0]).collect();
     let mut all_y: Vec<f64> = outer.iter().chain(inner.iter()).map(|p| p[1]).collect();
     for d in &dots {
-        all_x.push(d[0] - d[2]); all_x.push(d[0] + d[2]);
-        all_y.push(d[1] - d[2]); all_y.push(d[1] + d[2]);
+        all_x.push(d[0] - d[2]);
+        all_x.push(d[0] + d[2]);
+        all_y.push(d[1] - d[2]);
+        all_y.push(d[1] + d[2]);
     }
     let xmin = all_x.iter().cloned().fold(f64::INFINITY, f64::min);
     let xmax = all_x.iter().cloned().fold(f64::NEG_INFINITY, f64::max);
@@ -321,8 +361,12 @@ pub fn generate(text: &str) -> SymbolData {
             p[1] = rd(p[1]);
         };
 
-        for p in &mut outer { transform(p); }
-        for p in &mut inner { transform(p); }
+        for p in &mut outer {
+            transform(p);
+        }
+        for p in &mut inner {
+            transform(p);
+        }
         for d in &mut dots {
             d[0] = rd(CX + (d[0] - cx_content) * scale);
             d[1] = rd(CY + (d[1] - cy_content) * scale);
@@ -338,7 +382,16 @@ pub fn generate(text: &str) -> SymbolData {
     }
 
     let svg = render_svg(&outer, &inner, &dots, &extras, fh);
-    SymbolData { outer, inner, dots, extras, marks, has_question, has_negation, svg }
+    SymbolData {
+        outer,
+        inner,
+        dots,
+        extras,
+        marks,
+        has_question,
+        has_negation,
+        svg,
+    }
 }
 
 // ═════════════════════════════════════════════════════════════════
@@ -347,8 +400,8 @@ pub fn generate(text: &str) -> SymbolData {
 
 fn apply_mark(r: &mut [f64], w: &mut [f64], wm: &WM) {
     match wm.word.category {
-        Category::Entity   => entity_mark(r, w, wm),
-        Category::Action   => action_mark(w, wm),
+        Category::Entity => entity_mark(r, w, wm),
+        Category::Action => action_mark(w, wm),
         Category::Property => property_mark(r, w, wm),
         Category::Relation => relation_mark(r, w, wm),
         Category::Particle => particle_mark(r, w, wm),
@@ -367,7 +420,11 @@ fn entity_mark(r: &mut [f64], w: &mut [f64], wm: &WM) {
     let height = 45.0 + hash_to_float(h) * 40.0;
     let s_entry = 0.05 + hash_to_float(derive_hash(h, 1)) * 0.04;
     let s_exit = 0.11 + hash_to_float(derive_hash(h, 2)) * 0.07;
-    let side = if hash_to_float(derive_hash(h, 3)) > 0.5 { 1.0 } else { -1.0 };
+    let side = if hash_to_float(derive_hash(h, 3)) > 0.5 {
+        1.0
+    } else {
+        -1.0
+    };
 
     let hook_off = s_exit * (1.2 + hash_to_float(derive_hash(h, 4)) * 0.8) * side;
     let hook_h = height * (0.15 + hash_to_float(derive_hash(h, 5)) * 0.20);
@@ -379,27 +436,39 @@ fn entity_mark(r: &mut [f64], w: &mut [f64], wm: &WM) {
 
     // ── Satellite splotches: irregular blobs around the main tendril ──
     let n_splotch = 3 + (hash_to_float(derive_hash(h, 10)) * 3.0) as usize;
-    struct Splotch { angle: f64, height: f64, sigma: f64 }
-    let splotches: Vec<Splotch> = (0..n_splotch).map(|s| {
-        let off = (hash_to_float(derive_hash(h, 11 + s as u64)) - 0.5) * s_exit * 4.5;
-        Splotch {
-            angle: wm.angle + off,
-            height: height * (0.12 + hash_to_float(derive_hash(h, 15 + s as u64)) * 0.30),
-            sigma: s_exit * (0.20 + hash_to_float(derive_hash(h, 20 + s as u64)) * 0.45),
-        }
-    }).collect();
+    struct Splotch {
+        angle: f64,
+        height: f64,
+        sigma: f64,
+    }
+    let splotches: Vec<Splotch> = (0..n_splotch)
+        .map(|s| {
+            let off = (hash_to_float(derive_hash(h, 11 + s as u64)) - 0.5) * s_exit * 4.5;
+            Splotch {
+                angle: wm.angle + off,
+                height: height * (0.12 + hash_to_float(derive_hash(h, 15 + s as u64)) * 0.30),
+                sigma: s_exit * (0.20 + hash_to_float(derive_hash(h, 20 + s as u64)) * 0.45),
+            }
+        })
+        .collect();
 
     // ── Branch sub-tendrils: thin spikes forking off the main tendril ──
     let n_branch = 1 + (hash_to_float(derive_hash(h, 30)) > 0.4) as usize;
-    struct Branch { angle: f64, height: f64, sigma: f64 }
-    let branches: Vec<Branch> = (0..n_branch).map(|b| {
-        let off = (hash_to_float(derive_hash(h, 31 + b as u64)) - 0.3) * s_exit * 5.0;
-        Branch {
-            angle: wm.angle + off,
-            height: height * (0.20 + hash_to_float(derive_hash(h, 33 + b as u64)) * 0.15),
-            sigma: 0.012 + hash_to_float(derive_hash(h, 35 + b as u64)) * 0.010,
-        }
-    }).collect();
+    struct Branch {
+        angle: f64,
+        height: f64,
+        sigma: f64,
+    }
+    let branches: Vec<Branch> = (0..n_branch)
+        .map(|b| {
+            let off = (hash_to_float(derive_hash(h, 31 + b as u64)) - 0.3) * s_exit * 5.0;
+            Branch {
+                angle: wm.angle + off,
+                height: height * (0.20 + hash_to_float(derive_hash(h, 33 + b as u64)) * 0.15),
+                sigma: 0.012 + hash_to_float(derive_hash(h, 35 + b as u64)) * 0.010,
+            }
+        })
+        .collect();
 
     for i in 0..N {
         let t = TAU * i as f64 / N as f64;
@@ -547,14 +616,22 @@ fn generate_dots(wl: &[WM], r: &[f64], fh: u64) -> Vec<[f64; 3]> {
             Category::Negation => {
                 let dr = r[((wm.angle / TAU * N as f64) as usize) % N] - 10.0;
                 let ds = 2.5 + hash_to_float(derive_hash(h, 30)) * 2.5;
-                dots.push([rd(CX + dr * wm.angle.cos()), rd(CY - dr * wm.angle.sin()), rd(ds)]);
+                dots.push([
+                    rd(CX + dr * wm.angle.cos()),
+                    rd(CY - dr * wm.angle.sin()),
+                    rd(ds),
+                ]);
             }
             Category::Action => {
                 if hash_to_float(derive_hash(h, 30)) > 0.45 {
                     let off = (hash_to_float(derive_hash(h, 32)) - 0.5) * 0.1;
                     let da = wm.angle + off;
                     let ds = 1.8 + hash_to_float(derive_hash(h, 31)) * 2.5;
-                    dots.push([rd(CX + BASE_R * da.cos()), rd(CY - BASE_R * da.sin()), rd(ds)]);
+                    dots.push([
+                        rd(CX + BASE_R * da.cos()),
+                        rd(CY - BASE_R * da.sin()),
+                        rd(ds),
+                    ]);
                 }
             }
             _ => {}
@@ -567,7 +644,11 @@ fn generate_dots(wl: &[WM], r: &[f64], fh: u64) -> Vec<[f64; 3]> {
         let angle = hash_to_float(derive_hash(fh, 61 + p as u64)) * TAU;
         let dist = BASE_R * (0.45 + hash_to_float(derive_hash(fh, 70 + p as u64)) * 0.75);
         let size = 0.6 + hash_to_float(derive_hash(fh, 80 + p as u64)) * 1.8;
-        dots.push([rd(CX + dist * angle.cos()), rd(CY - dist * angle.sin()), rd(size)]);
+        dots.push([
+            rd(CX + dist * angle.cos()),
+            rd(CY - dist * angle.sin()),
+            rd(size),
+        ]);
     }
 
     dots
@@ -666,8 +747,11 @@ fn arc_path(center: f64, arc_len: f64, radius: f64, width: f64) -> String {
         let ro = radius + width * taper / 2.0;
         let x = CX + ro * t.cos();
         let y = CY - ro * t.sin();
-        if i == 0 { d = format!("M{:.1},{:.1}", x, y); }
-        else { d.push_str(&format!("L{:.1},{:.1}", x, y)); }
+        if i == 0 {
+            d = format!("M{:.1},{:.1}", x, y);
+        } else {
+            d.push_str(&format!("L{:.1},{:.1}", x, y));
+        }
     }
 
     // Inner edge (reversed, also tapered)
@@ -698,10 +782,14 @@ fn wisp_path(angle: f64, start_r: f64, length: f64, width: f64) -> String {
 
     format!(
         r#"<path d="M{:.1},{:.1}L{:.1},{:.1}L{:.1},{:.1}L{:.1},{:.1}Z"/>"#,
-        x1 + nx * hw, y1 + ny * hw,
-        x2 + nx * hw * 0.15, y2 + ny * hw * 0.15,
-        x2 - nx * hw * 0.15, y2 - ny * hw * 0.15,
-        x1 - nx * hw, y1 - ny * hw,
+        x1 + nx * hw,
+        y1 + ny * hw,
+        x2 + nx * hw * 0.15,
+        y2 + ny * hw * 0.15,
+        x2 - nx * hw * 0.15,
+        y2 - ny * hw * 0.15,
+        x1 - nx * hw,
+        y1 - ny * hw,
     )
 }
 
@@ -718,10 +806,14 @@ fn wisp_path_inward(angle: f64, start_r: f64, length: f64, width: f64) -> String
 
     format!(
         r#"<path d="M{:.1},{:.1}L{:.1},{:.1}L{:.1},{:.1}L{:.1},{:.1}Z"/>"#,
-        x1 + nx * hw, y1 + ny * hw,
-        x2 + nx * hw * 0.15, y2 + ny * hw * 0.15,
-        x2 - nx * hw * 0.15, y2 - ny * hw * 0.15,
-        x1 - nx * hw, y1 - ny * hw,
+        x1 + nx * hw,
+        y1 + ny * hw,
+        x2 + nx * hw * 0.15,
+        y2 + ny * hw * 0.15,
+        x2 - nx * hw * 0.15,
+        y2 - ny * hw * 0.15,
+        x1 - nx * hw,
+        y1 - ny * hw,
     )
 }
 
@@ -729,19 +821,32 @@ fn wisp_path_inward(angle: f64, start_r: f64, length: f64, width: f64) -> String
 // SVG RENDERING
 // ═════════════════════════════════════════════════════════════════
 
-fn render_svg(outer: &[[f64; 2]], inner: &[[f64; 2]], dots: &[[f64; 3]], extras: &str, seed: u64) -> String {
+fn render_svg(
+    outer: &[[f64; 2]],
+    inner: &[[f64; 2]],
+    dots: &[[f64; 3]],
+    extras: &str,
+    seed: u64,
+) -> String {
     let mut path = String::with_capacity(outer.len() * 24);
 
     path.push_str(&format!("M{:.1},{:.1}", outer[0][0], outer[0][1]));
-    for p in &outer[1..] { path.push_str(&format!("L{:.1},{:.1}", p[0], p[1])); }
+    for p in &outer[1..] {
+        path.push_str(&format!("L{:.1},{:.1}", p[0], p[1]));
+    }
     path.push('Z');
     path.push_str(&format!("M{:.1},{:.1}", inner[0][0], inner[0][1]));
-    for p in &inner[1..] { path.push_str(&format!("L{:.1},{:.1}", p[0], p[1])); }
+    for p in &inner[1..] {
+        path.push_str(&format!("L{:.1},{:.1}", p[0], p[1]));
+    }
     path.push('Z');
 
     let mut dot_svg = String::new();
     for d in dots {
-        dot_svg.push_str(&format!(r#"<circle cx="{:.1}" cy="{:.1}" r="{:.1}"/>"#, d[0], d[1], d[2]));
+        dot_svg.push_str(&format!(
+            r#"<circle cx="{:.1}" cy="{:.1}" r="{:.1}"/>"#,
+            d[0], d[1], d[2]
+        ));
     }
 
     let fs = (seed & 0xFFFF) as u32;

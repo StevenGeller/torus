@@ -1,22 +1,22 @@
 use axum::{
-    routing::{get, post},
-    Json, Router,
-    response::Html,
     extract::{ConnectInfo, Multipart, Query},
     http::HeaderMap,
+    response::Html,
+    routing::{get, post},
+    Json, Router,
 };
 use serde::{Deserialize, Serialize};
-use std::net::SocketAddr;
-use std::io::Write;
-use std::sync::{Arc, Mutex};
 use std::collections::HashMap;
+use std::io::Write;
+use std::net::SocketAddr;
+use std::sync::{Arc, Mutex};
 use tower_http::catch_panic::CatchPanicLayer;
-use tracing::{info, error};
+use tracing::{error, info};
 
+mod decode;
 mod language;
 mod symbol;
 mod word_primes;
-mod decode;
 
 // ─── Visual fingerprint database ────────────────────────────────
 // Every generated symbol is fingerprinted from its path geometry
@@ -119,7 +119,10 @@ async fn index(Query(q): Query<OgQuery>) -> Html<String> {
         );
         let html = template.replacen(
             "<meta property=\"og:type\" content=\"website\">",
-            &format!("<meta property=\"og:type\" content=\"website\">\n{}", og_tag),
+            &format!(
+                "<meta property=\"og:type\" content=\"website\">\n{}",
+                og_tag
+            ),
             1,
         );
         Html(html)
@@ -146,7 +149,8 @@ async fn generate(
 
     // Log input with IP and timestamp
     if !text.is_empty() {
-        let ip = headers.get("x-forwarded-for")
+        let ip = headers
+            .get("x-forwarded-for")
             .and_then(|v| v.to_str().ok())
             .map(|s| s.split(',').next().unwrap_or("").trim().to_string())
             .unwrap_or_else(|| addr.ip().to_string());
@@ -165,15 +169,18 @@ async fn generate(
         // Approximate date (good enough for logging)
         let (year, month, day) = epoch_days_to_date(days_since_epoch);
 
-        let log_line = format!("{:04}-{:02}-{:02}T{:02}:{:02}:{:02}Z\t{}\t{}",
-            year, month, day, hours, minutes, seconds, ip, text);
+        let log_line = format!(
+            "{:04}-{:02}-{:02}T{:02}:{:02}:{:02}Z\t{}\t{}",
+            year, month, day, hours, minutes, seconds, ip, text
+        );
         tokio::task::spawn_blocking(move || {
             let log_ok = std::fs::metadata("/home/steven/torus/access.log")
                 .map(|m| m.len() < MAX_ACCESS_LOG_BYTES)
                 .unwrap_or(true);
             if log_ok {
                 if let Ok(mut f) = std::fs::OpenOptions::new()
-                    .create(true).append(true)
+                    .create(true)
+                    .append(true)
                     .open("/home/steven/torus/access.log")
                 {
                     let _ = writeln!(f, "{}", log_line);
@@ -185,10 +192,14 @@ async fn generate(
     let data = symbol::generate(&text);
 
     // Decompose each word into semantic primes
-    let primes: Vec<PrimeGroup> = data.marks.iter().map(|m| PrimeGroup {
-        word: m.word.clone(),
-        primes: language::decompose_to_primes(&m.word),
-    }).collect();
+    let primes: Vec<PrimeGroup> = data
+        .marks
+        .iter()
+        .map(|m| PrimeGroup {
+            word: m.word.clone(),
+            primes: language::decompose_to_primes(&m.word),
+        })
+        .collect();
 
     // Store visual fingerprint for decode-by-geometry
     if !text.is_empty() {
@@ -199,7 +210,10 @@ async fn generate(
                 let text_for_disk = text.clone();
                 tokio::task::spawn_blocking(move || {
                     if let Ok(mut f) = std::fs::OpenOptions::new()
-                        .create(true).append(true).open(SYMBOL_DB_PATH) {
+                        .create(true)
+                        .append(true)
+                        .open(SYMBOL_DB_PATH)
+                    {
                         let _ = writeln!(f, "{}\t{}", fp, text_for_disk);
                     }
                 });
@@ -247,7 +261,10 @@ async fn og_image(
     let svg_str = svg_for_dark_bg(&data.svg);
 
     let svg_inner = svg_str
-        .replace("<svg viewBox=\"0 0 600 600\" xmlns=\"http://www.w3.org/2000/svg\">", "")
+        .replace(
+            "<svg viewBox=\"0 0 600 600\" xmlns=\"http://www.w3.org/2000/svg\">",
+            "",
+        )
         .replace("</svg>", "");
 
     let full_svg = format!(
@@ -269,14 +286,20 @@ async fn og_image(
                 Some(p) => p,
                 None => return error_png(),
             };
-            resvg::render(&tree, resvg::tiny_skia::Transform::default(), &mut pixmap.as_mut());
+            resvg::render(
+                &tree,
+                resvg::tiny_skia::Transform::default(),
+                &mut pixmap.as_mut(),
+            );
             let png = pixmap.encode_png().unwrap_or_default();
 
             if let Ok(mut c) = state.og_cache.lock() {
                 if c.len() >= 500 {
                     // Evict ~half the cache to amortize cleanup cost
                     let keys: Vec<String> = c.keys().take(250).cloned().collect();
-                    for k in keys { c.remove(&k); }
+                    for k in keys {
+                        c.remove(&k);
+                    }
                 }
                 c.insert(decoded, png.clone());
             }
@@ -315,15 +338,23 @@ async fn png_download(
     match resvg::usvg::Tree::from_str(&full_svg, &opt) {
         Ok(tree) => {
             let size = tree.size();
-            let mut pixmap = match resvg::tiny_skia::Pixmap::new(size.width() as u32, size.height() as u32) {
-                Some(p) => p,
-                None => return error_png(),
-            };
-            resvg::render(&tree, resvg::tiny_skia::Transform::default(), &mut pixmap.as_mut());
+            let mut pixmap =
+                match resvg::tiny_skia::Pixmap::new(size.width() as u32, size.height() as u32) {
+                    Some(p) => p,
+                    None => return error_png(),
+                };
+            resvg::render(
+                &tree,
+                resvg::tiny_skia::Transform::default(),
+                &mut pixmap.as_mut(),
+            );
             let png = pixmap.encode_png().unwrap_or_default();
             axum::response::Response::builder()
                 .header("Content-Type", "image/png")
-                .header("Content-Disposition", "attachment; filename=\"torus-symbol.png\"")
+                .header(
+                    "Content-Disposition",
+                    "attachment; filename=\"torus-symbol.png\"",
+                )
                 .body(axum::body::Body::from(png))
                 .unwrap()
         }
@@ -341,32 +372,96 @@ fn precompute_common_symbols(db: &mut HashMap<u64, String>) -> usize {
 
     // Common single words
     let words = [
-        "love", "time", "death", "life", "god", "peace", "war", "truth",
-        "beauty", "soul", "consciousness", "dream", "hope", "fear",
-        "home", "world", "universe", "light", "darkness", "silence",
-        "fire", "water", "earth", "sky", "sun", "moon", "star",
-        "heart", "mind", "body", "spirit", "voice", "music",
-        "power", "freedom", "wisdom", "knowledge", "infinity",
-        "nothing", "everything", "beginning", "end", "space",
-        "creation", "destruction", "journey", "arrival", "memory",
-        "sleep", "pain", "joy", "anger", "sadness", "happiness",
-        "child", "father", "mother", "friend", "king", "queen",
+        "love",
+        "time",
+        "death",
+        "life",
+        "god",
+        "peace",
+        "war",
+        "truth",
+        "beauty",
+        "soul",
+        "consciousness",
+        "dream",
+        "hope",
+        "fear",
+        "home",
+        "world",
+        "universe",
+        "light",
+        "darkness",
+        "silence",
+        "fire",
+        "water",
+        "earth",
+        "sky",
+        "sun",
+        "moon",
+        "star",
+        "heart",
+        "mind",
+        "body",
+        "spirit",
+        "voice",
+        "music",
+        "power",
+        "freedom",
+        "wisdom",
+        "knowledge",
+        "infinity",
+        "nothing",
+        "everything",
+        "beginning",
+        "end",
+        "space",
+        "creation",
+        "destruction",
+        "journey",
+        "arrival",
+        "memory",
+        "sleep",
+        "pain",
+        "joy",
+        "anger",
+        "sadness",
+        "happiness",
+        "child",
+        "father",
+        "mother",
+        "friend",
+        "king",
+        "queen",
     ];
 
     // Common phrases
     let phrases = [
-        "time is a circle", "a circle is time", "I love you",
-        "you love me", "what is truth", "where is my home",
-        "I dream of infinite space", "the world is not what it seems",
-        "love is eternal", "eternal is love",
-        "dog bites man", "man bites dog",
+        "time is a circle",
+        "a circle is time",
+        "I love you",
+        "you love me",
+        "what is truth",
+        "where is my home",
+        "I dream of infinite space",
+        "the world is not what it seems",
+        "love is eternal",
+        "eternal is love",
+        "dog bites man",
+        "man bites dog",
         "time has no beginning and no end",
-        "consciousness is infinite", "I am here",
-        "where are you", "who am I", "what is love",
-        "the sun rises", "darkness falls",
-        "life and death", "war and peace",
-        "only I love you", "I only love you",
-        "the big dog", "big the dog",
+        "consciousness is infinite",
+        "I am here",
+        "where are you",
+        "who am I",
+        "what is love",
+        "the sun rises",
+        "darkness falls",
+        "life and death",
+        "war and peace",
+        "only I love you",
+        "I only love you",
+        "the big dog",
+        "big the dog",
     ];
 
     for text in words.iter().chain(phrases.iter()) {
@@ -381,7 +476,10 @@ fn precompute_common_symbols(db: &mut HashMap<u64, String>) -> usize {
     // Persist to disk
     if count > 0 {
         if let Ok(mut f) = std::fs::OpenOptions::new()
-            .create(true).append(true).open(SYMBOL_DB_PATH) {
+            .create(true)
+            .append(true)
+            .open(SYMBOL_DB_PATH)
+        {
             for (fp, text) in db.iter() {
                 let _ = writeln!(f, "{}\t{}", fp, text);
             }
@@ -402,7 +500,7 @@ async fn sitemap() -> axum::response::Response {
             "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n\
             <urlset xmlns=\"http://www.sitemaps.org/schemas/sitemap/0.9\">\n\
             <url><loc>https://torus.steven-geller.com/</loc><changefreq>weekly</changefreq></url>\n\
-            </urlset>"
+            </urlset>",
         ))
         .unwrap()
 }
@@ -410,7 +508,7 @@ async fn sitemap() -> axum::response::Response {
 /// Replace CSS variable colors with light-on-dark for PNG/OG export.
 fn svg_for_dark_bg(svg: &str) -> String {
     svg.replace("var(--torus-ink, #1a1a1a)", "#e8e0d4")
-       .replace("var(--torus-ink,#1a1a1a)", "#e8e0d4")
+        .replace("var(--torus-ink,#1a1a1a)", "#e8e0d4")
 }
 
 fn error_png() -> axum::response::Response {
@@ -494,7 +592,9 @@ async fn decode(
 
                 // METHOD 4: Geometric reverse-engineering (detect marks, search candidates)
                 if outer.len() >= 100 && inner.len() >= 100 {
-                    if let Some(result) = decode::decode_geometric(&outer, &inner, &state.word_index) {
+                    if let Some(result) =
+                        decode::decode_geometric(&outer, &inner, &state.word_index)
+                    {
                         return Json(DecodeResponse {
                             text: result.text,
                             success: true,
@@ -510,7 +610,9 @@ async fn decode(
                     success: false,
                     method: None,
                     analysis: Some(analysis),
-                    error: Some("Symbol not recognized. Upload a Torus SVG to decode it.".to_string()),
+                    error: Some(
+                        "Symbol not recognized. Upload a Torus SVG to decode it.".to_string(),
+                    ),
                 });
             }
         }
@@ -530,8 +632,7 @@ fn analyze_svg(content: &str) -> VisualAnalysis {
 
     // Detect question gap by looking for very thin width sections
     // (the gap creates a region where stroke width approaches 0)
-    let has_gap = content.contains("fill-rule=\"evenodd\"")
-        && path_count > 0;
+    let has_gap = content.contains("fill-rule=\"evenodd\"") && path_count > 0;
 
     let complexity = if path_count > 8 && dot_count > 10 {
         "high — complex thought with multiple entities and modifiers"
@@ -562,10 +663,16 @@ fn base64_encode(input: &str) -> String {
         let val = (b0 << 16) | (b1 << 8) | b2;
         result.push(table[(val >> 18 & 0x3F) as usize] as char);
         result.push(table[(val >> 12 & 0x3F) as usize] as char);
-        if chunk.len() > 1 { result.push(table[(val >> 6 & 0x3F) as usize] as char); }
-        else { result.push('='); }
-        if chunk.len() > 2 { result.push(table[(val & 0x3F) as usize] as char); }
-        else { result.push('='); }
+        if chunk.len() > 1 {
+            result.push(table[(val >> 6 & 0x3F) as usize] as char);
+        } else {
+            result.push('=');
+        }
+        if chunk.len() > 2 {
+            result.push(table[(val & 0x3F) as usize] as char);
+        } else {
+            result.push('=');
+        }
     }
     result
 }
@@ -590,13 +697,32 @@ fn epoch_days_to_date(days: u64) -> (u64, u64, u64) {
     let mut y = 1970;
     let mut remaining = days;
     loop {
-        let days_in_year = if y % 4 == 0 && (y % 100 != 0 || y % 400 == 0) { 366 } else { 365 };
-        if remaining < days_in_year { break; }
+        let days_in_year = if y % 4 == 0 && (y % 100 != 0 || y % 400 == 0) {
+            366
+        } else {
+            365
+        };
+        if remaining < days_in_year {
+            break;
+        }
         remaining -= days_in_year;
         y += 1;
     }
     let leap = y % 4 == 0 && (y % 100 != 0 || y % 400 == 0);
-    let mdays = [31, if leap {29} else {28}, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
+    let mdays = [
+        31,
+        if leap { 29 } else { 28 },
+        31,
+        30,
+        31,
+        30,
+        31,
+        31,
+        30,
+        31,
+        30,
+        31,
+    ];
     let mut m = 0;
     while m < 12 && remaining >= mdays[m] {
         remaining -= mdays[m];
@@ -611,9 +737,8 @@ fn urldecode(s: &str) -> String {
     let mut i = 0;
     while i < bytes.len() {
         if bytes[i] == b'%' && i + 2 < bytes.len() {
-            if let Ok(val) = u8::from_str_radix(
-                &String::from_utf8_lossy(&bytes[i + 1..i + 3]), 16
-            ) {
+            if let Ok(val) = u8::from_str_radix(&String::from_utf8_lossy(&bytes[i + 1..i + 3]), 16)
+            {
                 result.push(val);
                 i += 3;
                 continue;
@@ -640,7 +765,10 @@ async fn generate_svg(Json(req): Json<GenerateRequest>) -> axum::response::Respo
     );
     axum::response::Response::builder()
         .header("Content-Type", "image/svg+xml")
-        .header("Content-Disposition", "attachment; filename=\"torus-symbol.svg\"")
+        .header(
+            "Content-Disposition",
+            "attachment; filename=\"torus-symbol.svg\"",
+        )
         .body(axum::body::Body::from(svg))
         .unwrap()
 }
@@ -676,10 +804,17 @@ async fn main() {
     info!(count = pre, "pre-computed common symbol fingerprints");
 
     let word_index = decode::WordIndex::build();
-    info!(words = word_index.all_words.len(), categories = word_index.by_category.len(), "word index loaded");
+    info!(
+        words = word_index.all_words.len(),
+        categories = word_index.by_category.len(),
+        "word index loaded"
+    );
 
     let single_word_fps = decode::precompute_single_word_fingerprints();
-    info!(count = single_word_fps.len(), "pre-computed single-word decode fingerprints");
+    info!(
+        count = single_word_fps.len(),
+        "pre-computed single-word decode fingerprints"
+    );
 
     let state = AppState {
         og_cache: Arc::new(Mutex::new(HashMap::new())),
@@ -702,7 +837,8 @@ async fn main() {
         .with_state(state);
 
     let addr = SocketAddr::from(([127, 0, 0, 1], 3031));
-    let listener = tokio::net::TcpListener::bind(addr).await
+    let listener = tokio::net::TcpListener::bind(addr)
+        .await
         .expect("failed to bind to port 3031");
     info!(%addr, "torus listening");
     axum::serve(

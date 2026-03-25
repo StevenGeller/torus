@@ -4,7 +4,6 @@
 /// 1. Extract embedded `data-torus-text` attribute (SVGs downloaded from this server)
 /// 2. Fingerprint lookup (symbols previously generated on this server)
 /// 3. Geometric reverse-engineering (detect marks, classify, search dictionary)
-
 use crate::language::{self, Category};
 use crate::symbol;
 use std::collections::HashMap;
@@ -35,8 +34,12 @@ fn base64_decode(input: &str) -> Option<String> {
             val |= idx << (6 * (3 - j));
         }
         bytes.push((val >> 16) as u8);
-        if chunk.len() > 2 { bytes.push((val >> 8) as u8); }
-        if chunk.len() > 3 { bytes.push(val as u8); }
+        if chunk.len() > 2 {
+            bytes.push((val >> 8) as u8);
+        }
+        if chunk.len() > 3 {
+            bytes.push(val as u8);
+        }
     }
     String::from_utf8(bytes).ok()
 }
@@ -62,7 +65,9 @@ pub fn extract_svg_paths(svg: &str) -> (Vec<[f64; 2]>, Vec<[f64; 2]>) {
         let mut coords = Vec::new();
         for part in seg.split(|c: char| c == 'M' || c == 'L') {
             let part = part.trim();
-            if part.is_empty() { continue; }
+            if part.is_empty() {
+                continue;
+            }
             if let Some(comma) = part.find(',') {
                 if let (Ok(x), Ok(y)) = (
                     part[..comma].parse::<f64>(),
@@ -75,8 +80,16 @@ pub fn extract_svg_paths(svg: &str) -> (Vec<[f64; 2]>, Vec<[f64; 2]>) {
         coords
     };
 
-    let outer = if segments.len() > 0 { parse_segment(segments[0]) } else { Vec::new() };
-    let inner = if segments.len() > 1 { parse_segment(segments[1]) } else { Vec::new() };
+    let outer = if segments.len() > 0 {
+        parse_segment(segments[0])
+    } else {
+        Vec::new()
+    };
+    let inner = if segments.len() > 1 {
+        parse_segment(segments[1])
+    } else {
+        Vec::new()
+    };
 
     (outer, inner)
 }
@@ -98,21 +111,32 @@ impl WordIndex {
         let test_words = get_all_known_words();
 
         for word in test_words {
-            if seen.contains(&word) { continue; }
+            if seen.contains(&word) {
+                continue;
+            }
             seen.insert(word.clone());
             let cat = language::categorize(&word);
             let priority = language::category_priority(cat);
             let hash = language::word_hash(&word);
-            by_category.entry(priority).or_default().push((word.clone(), hash));
+            by_category
+                .entry(priority)
+                .or_default()
+                .push((word.clone(), hash));
             all_words.push(word);
         }
 
-        WordIndex { by_category, all_words }
+        WordIndex {
+            by_category,
+            all_words,
+        }
     }
 
     pub fn words_for_category(&self, cat: Category) -> &[(String, u64)] {
         let priority = language::category_priority(cat);
-        self.by_category.get(&priority).map(|v| v.as_slice()).unwrap_or(&[])
+        self.by_category
+            .get(&priority)
+            .map(|v| v.as_slice())
+            .unwrap_or(&[])
     }
 }
 
@@ -136,7 +160,9 @@ pub fn decode_geometric(
     word_index: &WordIndex,
 ) -> Option<DecodeResult> {
     let n = outer.len();
-    if n < 100 { return None; } // too few points
+    if n < 100 {
+        return None;
+    } // too few points
 
     let cx = 300.0;
     let cy = 300.0;
@@ -155,7 +181,11 @@ pub fn decode_geometric(
     let baseline = smooth_circular(&r_mid, n / 6);
 
     // Step 3: Compute deviations from baseline
-    let dev: Vec<f64> = r_mid.iter().zip(baseline.iter()).map(|(r, b)| r - b).collect();
+    let dev: Vec<f64> = r_mid
+        .iter()
+        .zip(baseline.iter())
+        .map(|(r, b)| r - b)
+        .collect();
 
     // Step 4: Find significant peaks (entities, negations) and width anomalies (actions)
     let marks = detect_marks(&dev, &width, n);
@@ -169,16 +199,19 @@ pub fn decode_geometric(
     let mark_count = marks.len();
 
     // Step 5: For each mark, determine category and extract primary parameter
-    let classified: Vec<ClassifiedMark> = marks.iter().map(|m| classify_mark(m, &dev, &width, n)).collect();
+    let classified: Vec<ClassifiedMark> = marks
+        .iter()
+        .map(|m| classify_mark(m, &dev, &width, n))
+        .collect();
 
     // Step 6: Search for matching word combinations
     search_candidates(&classified, mark_count, outer, word_index)
 }
 
 struct DetectedMark {
-    center_idx: usize,    // index in the point array
-    peak_value: f64,      // deviation at peak (positive=outward, negative=inward)
-    width_variance: f64,  // width variation in the mark region
+    center_idx: usize,   // index in the point array
+    peak_value: f64,     // deviation at peak (positive=outward, negative=inward)
+    width_variance: f64, // width variation in the mark region
 }
 
 struct ClassifiedMark {
@@ -223,12 +256,18 @@ fn detect_marks(dev: &[f64], width: &[f64], n: usize) -> Vec<DetectedMark> {
                     best_val = dev[j].abs();
                     best_idx = j;
                 }
-                if dev[j].abs() < threshold / 2.0 { break; }
+                if dev[j].abs() < threshold / 2.0 {
+                    break;
+                }
                 j += 1;
             }
 
             // Compute width variance in the mark region
-            let region_start = if best_idx > n / 20 { best_idx - n / 20 } else { 0 };
+            let region_start = if best_idx > n / 20 {
+                best_idx - n / 20
+            } else {
+                0
+            };
             let region_end = (best_idx + n / 20).min(n);
             let w_slice: Vec<f64> = (region_start..region_end).map(|k| width[k]).collect();
             let w_var = if w_slice.is_empty() {
@@ -253,7 +292,11 @@ fn detect_marks(dev: &[f64], width: &[f64], n: usize) -> Vec<DetectedMark> {
     // Also detect action marks (width oscillation without big radius deviation)
     // by looking for high width variance regions that don't overlap with existing marks
     let width_smooth = smooth_circular(width, n / 10);
-    let width_dev: Vec<f64> = width.iter().zip(width_smooth.iter()).map(|(w, s)| (w - s).abs()).collect();
+    let width_dev: Vec<f64> = width
+        .iter()
+        .zip(width_smooth.iter())
+        .map(|(w, s)| (w - s).abs())
+        .collect();
     let w_dev_smooth = smooth_circular(&width_dev, n / 20);
 
     for i in 0..n {
@@ -274,7 +317,9 @@ fn detect_marks(dev: &[f64], width: &[f64], n: usize) -> Vec<DetectedMark> {
                         best_val = w_dev_smooth[j];
                         best_idx = j;
                     }
-                    if w_dev_smooth[j] < 2.0 { break; }
+                    if w_dev_smooth[j] < 2.0 {
+                        break;
+                    }
                     j += 1;
                 }
                 marks.push(DetectedMark {
@@ -389,7 +434,8 @@ fn search_candidates(
         // Single mark: try all words of that category, sorted by parameter proximity
         let cat = classified[0].category;
         let target_param = classified[0].primary_param;
-        let mut candidates: Vec<&(String, u64)> = word_index.words_for_category(cat).iter().collect();
+        let mut candidates: Vec<&(String, u64)> =
+            word_index.words_for_category(cat).iter().collect();
 
         // Sort by how close the word's primary param is to what we observed
         candidates.sort_by(|a, b| {
@@ -419,7 +465,8 @@ fn search_candidates(
         for cm in classified {
             let words = word_index.words_for_category(cm.category);
             let target = cm.primary_param;
-            let mut scored: Vec<(&str, f64)> = words.iter()
+            let mut scored: Vec<(&str, f64)> = words
+                .iter()
                 .map(|(w, h)| {
                     let p = language::hash_to_float(*h);
                     (w.as_str(), (p - target).abs())
@@ -463,7 +510,9 @@ fn search_candidates(
             }
 
             count += 1;
-            if count >= max_combos { break; }
+            if count >= max_combos {
+                break;
+            }
         }
     }
 
@@ -480,105 +529,559 @@ fn get_all_known_words() -> Vec<String> {
     // Single words from dictionary_lookup categories
     let word_list = [
         // Particles
-        "the", "a", "an", "this", "that", "these", "those",
-        "my", "your", "his", "her", "its", "our", "their",
-        "i", "me", "you", "he", "she", "it", "we", "they",
-        "who", "whom", "which", "what",
-        "and", "but", "or", "yet", "so", "if", "then",
-        "both", "either", "each", "every", "all", "some", "any",
-        "one", "other", "another", "such", "much", "many", "few",
-        "more", "most", "own", "same",
+        "the",
+        "a",
+        "an",
+        "this",
+        "that",
+        "these",
+        "those",
+        "my",
+        "your",
+        "his",
+        "her",
+        "its",
+        "our",
+        "their",
+        "i",
+        "me",
+        "you",
+        "he",
+        "she",
+        "it",
+        "we",
+        "they",
+        "who",
+        "whom",
+        "which",
+        "what",
+        "and",
+        "but",
+        "or",
+        "yet",
+        "so",
+        "if",
+        "then",
+        "both",
+        "either",
+        "each",
+        "every",
+        "all",
+        "some",
+        "any",
+        "one",
+        "other",
+        "another",
+        "such",
+        "much",
+        "many",
+        "few",
+        "more",
+        "most",
+        "own",
+        "same",
         // Relations
-        "in", "on", "at", "to", "for", "of", "with", "by",
-        "from", "into", "through", "during", "before", "after",
-        "above", "below", "between", "under", "over", "about",
-        "against", "among", "around", "behind", "beside", "beyond",
-        "near", "toward", "towards", "upon", "within", "without",
-        "across", "along", "until", "since", "than", "like", "as",
+        "in",
+        "on",
+        "at",
+        "to",
+        "for",
+        "of",
+        "with",
+        "by",
+        "from",
+        "into",
+        "through",
+        "during",
+        "before",
+        "after",
+        "above",
+        "below",
+        "between",
+        "under",
+        "over",
+        "about",
+        "against",
+        "among",
+        "around",
+        "behind",
+        "beside",
+        "beyond",
+        "near",
+        "toward",
+        "towards",
+        "upon",
+        "within",
+        "without",
+        "across",
+        "along",
+        "until",
+        "since",
+        "than",
+        "like",
+        "as",
         // Actions (common)
-        "is", "am", "are", "was", "were", "be", "been", "being",
-        "have", "has", "had", "do", "does", "did",
-        "say", "said", "go", "went", "come", "came", "get", "got",
-        "make", "made", "know", "knew", "think", "thought",
-        "take", "took", "see", "saw", "want", "give", "gave",
-        "use", "find", "found", "tell", "told", "ask", "work",
-        "try", "leave", "left", "call", "keep", "kept", "let",
-        "begin", "seem", "help", "show", "hear", "heard",
-        "play", "run", "ran", "move", "live", "believe",
-        "hold", "held", "bring", "brought", "happen", "write", "wrote",
-        "sit", "sat", "stand", "stood", "lose", "lost", "pay", "paid",
-        "meet", "met", "learn", "change", "lead", "led",
-        "understand", "watch", "follow", "stop", "create", "read",
-        "grow", "grew", "open", "walk", "win", "won", "offer",
-        "remember", "love", "consider", "appear", "buy", "bought",
-        "wait", "serve", "die", "send", "sent", "build", "built",
-        "stay", "fall", "fell", "reach", "kill", "remain",
-        "feel", "felt", "become", "became", "look", "need",
-        "start", "exist", "dream", "eat", "ate", "sleep", "slept",
-        "fly", "flew", "sing", "sang", "draw", "drew",
-        "break", "broke", "drive", "drove", "rise", "rose",
-        "bite", "bit", "carry", "fight", "fought", "wear", "wore",
-        "teach", "taught", "pull", "push", "throw", "threw",
-        "catch", "caught", "dance", "swim", "swam", "travel",
-        "share", "connect", "flow", "spin", "spun",
-        "wrap", "repeat", "return", "end", "wonder",
+        "is",
+        "am",
+        "are",
+        "was",
+        "were",
+        "be",
+        "been",
+        "being",
+        "have",
+        "has",
+        "had",
+        "do",
+        "does",
+        "did",
+        "say",
+        "said",
+        "go",
+        "went",
+        "come",
+        "came",
+        "get",
+        "got",
+        "make",
+        "made",
+        "know",
+        "knew",
+        "think",
+        "thought",
+        "take",
+        "took",
+        "see",
+        "saw",
+        "want",
+        "give",
+        "gave",
+        "use",
+        "find",
+        "found",
+        "tell",
+        "told",
+        "ask",
+        "work",
+        "try",
+        "leave",
+        "left",
+        "call",
+        "keep",
+        "kept",
+        "let",
+        "begin",
+        "seem",
+        "help",
+        "show",
+        "hear",
+        "heard",
+        "play",
+        "run",
+        "ran",
+        "move",
+        "live",
+        "believe",
+        "hold",
+        "held",
+        "bring",
+        "brought",
+        "happen",
+        "write",
+        "wrote",
+        "sit",
+        "sat",
+        "stand",
+        "stood",
+        "lose",
+        "lost",
+        "pay",
+        "paid",
+        "meet",
+        "met",
+        "learn",
+        "change",
+        "lead",
+        "led",
+        "understand",
+        "watch",
+        "follow",
+        "stop",
+        "create",
+        "read",
+        "grow",
+        "grew",
+        "open",
+        "walk",
+        "win",
+        "won",
+        "offer",
+        "remember",
+        "love",
+        "consider",
+        "appear",
+        "buy",
+        "bought",
+        "wait",
+        "serve",
+        "die",
+        "send",
+        "sent",
+        "build",
+        "built",
+        "stay",
+        "fall",
+        "fell",
+        "reach",
+        "kill",
+        "remain",
+        "feel",
+        "felt",
+        "become",
+        "became",
+        "look",
+        "need",
+        "start",
+        "exist",
+        "dream",
+        "eat",
+        "ate",
+        "sleep",
+        "slept",
+        "fly",
+        "flew",
+        "sing",
+        "sang",
+        "draw",
+        "drew",
+        "break",
+        "broke",
+        "drive",
+        "drove",
+        "rise",
+        "rose",
+        "bite",
+        "bit",
+        "carry",
+        "fight",
+        "fought",
+        "wear",
+        "wore",
+        "teach",
+        "taught",
+        "pull",
+        "push",
+        "throw",
+        "threw",
+        "catch",
+        "caught",
+        "dance",
+        "swim",
+        "swam",
+        "travel",
+        "share",
+        "connect",
+        "flow",
+        "spin",
+        "spun",
+        "wrap",
+        "repeat",
+        "return",
+        "end",
+        "wonder",
         // Properties
-        "good", "bad", "great", "small", "large", "big", "little",
-        "long", "short", "old", "young", "new", "first", "last",
-        "high", "low", "right", "wrong", "next", "early", "late",
-        "important", "different", "real", "true", "false", "full",
-        "hard", "easy", "strong", "weak", "fast", "slow",
-        "dark", "light", "hot", "cold", "warm", "cool",
-        "deep", "wide", "far", "close", "simple",
-        "beautiful", "happy", "sad", "angry", "quiet", "loud",
-        "soft", "sharp", "bright", "dim", "thick", "thin",
-        "round", "flat", "smooth", "rough", "wet", "dry",
-        "alive", "dead", "empty", "alone", "ready", "certain",
-        "possible", "impossible", "necessary", "natural", "strange",
-        "ancient", "modern", "eternal", "infinite", "circular",
-        "complete", "perfect", "pure", "sacred", "vast",
-        "silent", "still", "gentle", "fierce", "wild",
-        "here", "there", "now", "always", "never",
-        "very", "often", "already", "even", "only", "again",
-        "too", "quite", "enough", "well", "together", "away",
+        "good",
+        "bad",
+        "great",
+        "small",
+        "large",
+        "big",
+        "little",
+        "long",
+        "short",
+        "old",
+        "young",
+        "new",
+        "first",
+        "last",
+        "high",
+        "low",
+        "right",
+        "wrong",
+        "next",
+        "early",
+        "late",
+        "important",
+        "different",
+        "real",
+        "true",
+        "false",
+        "full",
+        "hard",
+        "easy",
+        "strong",
+        "weak",
+        "fast",
+        "slow",
+        "dark",
+        "light",
+        "hot",
+        "cold",
+        "warm",
+        "cool",
+        "deep",
+        "wide",
+        "far",
+        "close",
+        "simple",
+        "beautiful",
+        "happy",
+        "sad",
+        "angry",
+        "quiet",
+        "loud",
+        "soft",
+        "sharp",
+        "bright",
+        "dim",
+        "thick",
+        "thin",
+        "round",
+        "flat",
+        "smooth",
+        "rough",
+        "wet",
+        "dry",
+        "alive",
+        "dead",
+        "empty",
+        "alone",
+        "ready",
+        "certain",
+        "possible",
+        "impossible",
+        "necessary",
+        "natural",
+        "strange",
+        "ancient",
+        "modern",
+        "eternal",
+        "infinite",
+        "circular",
+        "complete",
+        "perfect",
+        "pure",
+        "sacred",
+        "vast",
+        "silent",
+        "still",
+        "gentle",
+        "fierce",
+        "wild",
+        "here",
+        "there",
+        "now",
+        "always",
+        "never",
+        "very",
+        "often",
+        "already",
+        "even",
+        "only",
+        "again",
+        "too",
+        "quite",
+        "enough",
+        "well",
+        "together",
+        "away",
         // Entities
-        "time", "year", "day", "night", "week", "month", "hour",
-        "moment", "second", "minute", "morning", "evening",
-        "world", "life", "death", "man", "woman", "child",
-        "children", "people", "person", "family", "friend",
-        "name", "hand", "eye", "eyes", "face", "head", "body",
-        "heart", "mind", "soul", "voice", "word", "words",
-        "thing", "way", "place", "home", "house", "room",
-        "door", "window", "wall", "water", "fire", "air",
-        "earth", "sky", "sun", "moon", "star", "stars",
-        "sea", "ocean", "river", "mountain", "tree", "forest",
-        "flower", "stone", "rain", "wind", "snow", "ice",
-        "shadow", "color", "sound", "music", "song",
-        "story", "book", "letter", "language",
-        "idea", "truth", "power", "fear", "hope",
-        "peace", "war", "god", "spirit",
-        "beginning", "ending", "past", "present", "future",
-        "nature", "science", "art", "city", "country",
-        "king", "queen", "father", "mother", "son", "daughter",
-        "brother", "sister", "husband", "wife",
-        "food", "bread", "blood", "bone", "skin",
-        "animal", "bird", "fish", "horse", "dog", "cat",
-        "road", "path", "bridge", "ship", "car",
-        "money", "school", "church", "law", "state",
-        "number", "part", "side", "point", "line",
-        "form", "meaning", "question", "answer",
-        "century", "history", "age", "memory",
-        "space", "universe", "infinity", "eternity", "void",
-        "cycle", "circle", "spiral", "ring", "loop", "sphere", "torus",
-        "symbol", "sign", "mark", "pattern", "shape",
-        "knowledge", "wisdom", "understanding",
-        "energy", "force", "matter", "gravity", "particle",
-        "wave", "frequency", "vibration", "resonance",
-        "consciousness", "awareness", "perception", "existence",
-        "reality", "dimension", "boundary", "origin", "source",
-        "arrival", "departure", "journey", "destination",
+        "time",
+        "year",
+        "day",
+        "night",
+        "week",
+        "month",
+        "hour",
+        "moment",
+        "second",
+        "minute",
+        "morning",
+        "evening",
+        "world",
+        "life",
+        "death",
+        "man",
+        "woman",
+        "child",
+        "children",
+        "people",
+        "person",
+        "family",
+        "friend",
+        "name",
+        "hand",
+        "eye",
+        "eyes",
+        "face",
+        "head",
+        "body",
+        "heart",
+        "mind",
+        "soul",
+        "voice",
+        "word",
+        "words",
+        "thing",
+        "way",
+        "place",
+        "home",
+        "house",
+        "room",
+        "door",
+        "window",
+        "wall",
+        "water",
+        "fire",
+        "air",
+        "earth",
+        "sky",
+        "sun",
+        "moon",
+        "star",
+        "stars",
+        "sea",
+        "ocean",
+        "river",
+        "mountain",
+        "tree",
+        "forest",
+        "flower",
+        "stone",
+        "rain",
+        "wind",
+        "snow",
+        "ice",
+        "shadow",
+        "color",
+        "sound",
+        "music",
+        "song",
+        "story",
+        "book",
+        "letter",
+        "language",
+        "idea",
+        "truth",
+        "power",
+        "fear",
+        "hope",
+        "peace",
+        "war",
+        "god",
+        "spirit",
+        "beginning",
+        "ending",
+        "past",
+        "present",
+        "future",
+        "nature",
+        "science",
+        "art",
+        "city",
+        "country",
+        "king",
+        "queen",
+        "father",
+        "mother",
+        "son",
+        "daughter",
+        "brother",
+        "sister",
+        "husband",
+        "wife",
+        "food",
+        "bread",
+        "blood",
+        "bone",
+        "skin",
+        "animal",
+        "bird",
+        "fish",
+        "horse",
+        "dog",
+        "cat",
+        "road",
+        "path",
+        "bridge",
+        "ship",
+        "car",
+        "money",
+        "school",
+        "church",
+        "law",
+        "state",
+        "number",
+        "part",
+        "side",
+        "point",
+        "line",
+        "form",
+        "meaning",
+        "question",
+        "answer",
+        "century",
+        "history",
+        "age",
+        "memory",
+        "space",
+        "universe",
+        "infinity",
+        "eternity",
+        "void",
+        "cycle",
+        "circle",
+        "spiral",
+        "ring",
+        "loop",
+        "sphere",
+        "torus",
+        "symbol",
+        "sign",
+        "mark",
+        "pattern",
+        "shape",
+        "knowledge",
+        "wisdom",
+        "understanding",
+        "energy",
+        "force",
+        "matter",
+        "gravity",
+        "particle",
+        "wave",
+        "frequency",
+        "vibration",
+        "resonance",
+        "consciousness",
+        "awareness",
+        "perception",
+        "existence",
+        "reality",
+        "dimension",
+        "boundary",
+        "origin",
+        "source",
+        "arrival",
+        "departure",
+        "journey",
+        "destination",
         // Negation
-        "not", "never", "nothing", "nobody", "none",
+        "not",
+        "never",
+        "nothing",
+        "nobody",
+        "none",
     ];
 
     for w in &word_list {
@@ -587,34 +1090,152 @@ fn get_all_known_words() -> Vec<String> {
 
     // Add words from word_primes that aren't already in the list
     let extra_words = [
-        "elephant", "whale", "lion", "tiger", "bear", "wolf",
-        "eagle", "snake", "spider", "butterfly", "dolphin",
-        "rose", "oak", "pine",
-        "sword", "hammer", "knife", "arrow", "shield",
-        "gold", "silver", "iron", "steel", "diamond", "crystal",
-        "castle", "temple", "tower", "prison", "farm",
-        "storm", "thunder", "lightning", "cloud", "fog", "rainbow",
-        "red", "blue", "green", "yellow", "black", "white",
-        "purple", "pink", "brown", "gray",
-        "doctor", "soldier", "farmer", "priest", "artist", "writer",
-        "hero", "thief", "stranger", "prince", "princess",
-        "wine", "beer", "tea", "coffee", "milk", "honey",
-        "apple", "grape", "wheat", "rice",
-        "arm", "leg", "foot", "finger", "brain", "tongue",
-        "dress", "hat", "shoe", "crown",
-        "boat", "wagon", "train", "plane", "rocket",
-        "guitar", "piano", "violin", "drum", "flute",
-        "atom", "cell", "gene", "gravity", "equation",
-        "justice", "mercy", "honor", "glory", "fate", "chaos",
-        "courage", "patience", "pride", "shame", "guilt",
-        "jealousy", "loneliness", "hunger", "desire", "pleasure",
-        "agony", "confusion", "nostalgia", "regret", "gratitude",
-        "attack", "defend", "escape", "hide", "chase", "climb",
-        "burn", "heal", "breathe", "whisper", "shout", "laugh",
-        "smile", "weep", "kiss", "pray", "forgive", "betray",
-        "explore", "invent", "solve", "trick", "murder",
-        "celebrate", "suffer", "sacrifice", "worship", "meditate",
-        "imagine", "choose", "promise", "argue", "confess",
+        "elephant",
+        "whale",
+        "lion",
+        "tiger",
+        "bear",
+        "wolf",
+        "eagle",
+        "snake",
+        "spider",
+        "butterfly",
+        "dolphin",
+        "rose",
+        "oak",
+        "pine",
+        "sword",
+        "hammer",
+        "knife",
+        "arrow",
+        "shield",
+        "gold",
+        "silver",
+        "iron",
+        "steel",
+        "diamond",
+        "crystal",
+        "castle",
+        "temple",
+        "tower",
+        "prison",
+        "farm",
+        "storm",
+        "thunder",
+        "lightning",
+        "cloud",
+        "fog",
+        "rainbow",
+        "red",
+        "blue",
+        "green",
+        "yellow",
+        "black",
+        "white",
+        "purple",
+        "pink",
+        "brown",
+        "gray",
+        "doctor",
+        "soldier",
+        "farmer",
+        "priest",
+        "artist",
+        "writer",
+        "hero",
+        "thief",
+        "stranger",
+        "prince",
+        "princess",
+        "wine",
+        "beer",
+        "tea",
+        "coffee",
+        "milk",
+        "honey",
+        "apple",
+        "grape",
+        "wheat",
+        "rice",
+        "arm",
+        "leg",
+        "foot",
+        "finger",
+        "brain",
+        "tongue",
+        "dress",
+        "hat",
+        "shoe",
+        "crown",
+        "boat",
+        "wagon",
+        "train",
+        "plane",
+        "rocket",
+        "guitar",
+        "piano",
+        "violin",
+        "drum",
+        "flute",
+        "atom",
+        "cell",
+        "gene",
+        "gravity",
+        "equation",
+        "justice",
+        "mercy",
+        "honor",
+        "glory",
+        "fate",
+        "chaos",
+        "courage",
+        "patience",
+        "pride",
+        "shame",
+        "guilt",
+        "jealousy",
+        "loneliness",
+        "hunger",
+        "desire",
+        "pleasure",
+        "agony",
+        "confusion",
+        "nostalgia",
+        "regret",
+        "gratitude",
+        "attack",
+        "defend",
+        "escape",
+        "hide",
+        "chase",
+        "climb",
+        "burn",
+        "heal",
+        "breathe",
+        "whisper",
+        "shout",
+        "laugh",
+        "smile",
+        "weep",
+        "kiss",
+        "pray",
+        "forgive",
+        "betray",
+        "explore",
+        "invent",
+        "solve",
+        "trick",
+        "murder",
+        "celebrate",
+        "suffer",
+        "sacrifice",
+        "worship",
+        "meditate",
+        "imagine",
+        "choose",
+        "promise",
+        "argue",
+        "confess",
     ];
 
     for w in &extra_words {
@@ -648,7 +1269,10 @@ mod tests {
         // Use the same base64 encoder as the generate-svg endpoint
         let text = "time is a circle";
         let encoded = crate::base64_encode(text);
-        let svg = format!(r#"<svg data-torus-text="{}" viewBox="0 0 600 600"></svg>"#, encoded);
+        let svg = format!(
+            r#"<svg data-torus-text="{}" viewBox="0 0 600 600"></svg>"#,
+            encoded
+        );
         assert_eq!(decode_from_attribute(&svg), Some(text.to_string()));
     }
 
