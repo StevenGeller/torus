@@ -50,6 +50,7 @@ See [LANGUAGE.md](LANGUAGE.md) for the full linguistic system.
 │  GET  /og/{text}         → 1200×630 OG image PNG │
 │  GET  /png/{text}        → 600×600 download PNG  │
 │  GET  /                  → frontend              │
+│  GET  /health            → "ok" (monitoring)     │
 └──────────────────────────────────────────────────┘
 ```
 
@@ -57,7 +58,7 @@ See [LANGUAGE.md](LANGUAGE.md) for the full linguistic system.
 
 | File | Lines | Purpose |
 |------|-------|---------|
-| `src/main.rs` | 650 | Web server, API endpoints, OG image rendering (resvg), access logging |
+| `src/main.rs` | 716 | Web server, API endpoints, OG image rendering (resvg), structured logging |
 | `src/symbol.rs` | 768 | Symbol generation engine: polar geometry, brush dynamics, mark rendering |
 | `src/language.rs` | 944 | Linguistic engine: word classification, aspect detection, semantic roles, NSM primes |
 | `src/decode.rs` | 618 | Symbol recognition: metadata extraction, fingerprint matching, geometric reverse-engineering |
@@ -99,6 +100,8 @@ cargo build --release
 ```
 
 Server starts on `127.0.0.1:3031`. For production, put it behind a reverse proxy with TLS.
+
+Set `RUST_LOG=info` (default) or `RUST_LOG=debug` for verbose output. The server handles SIGTERM/SIGINT gracefully, draining in-flight requests before shutdown.
 
 ### systemd (production)
 

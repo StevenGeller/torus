@@ -942,3 +942,149 @@ fn try_compound_split(word: &str) -> Option<Vec<SemanticPrime>> {
     }
     None
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // --- fnv1a ---
+
+    #[test]
+    fn fnv1a_deterministic() {
+        assert_eq!(fnv1a(b"hello"), fnv1a(b"hello"));
+    }
+
+    #[test]
+    fn fnv1a_differs() {
+        assert_ne!(fnv1a(b"hello"), fnv1a(b"world"));
+    }
+
+    #[test]
+    fn fnv1a_empty() {
+        // FNV-1a of empty input is the offset basis
+        assert_eq!(fnv1a(b""), 14695981039346656037);
+    }
+
+    // --- word_hash ---
+
+    #[test]
+    fn word_hash_case_insensitive() {
+        assert_eq!(word_hash("Time"), word_hash("time"));
+        assert_eq!(word_hash("LOVE"), word_hash("love"));
+    }
+
+    // --- hash_to_float ---
+
+    #[test]
+    fn hash_to_float_in_range() {
+        for seed in 0..100u64 {
+            let f = hash_to_float(seed * 1000000);
+            assert!(f >= 0.0 && f < 1.0, "hash_to_float({}) = {}", seed, f);
+        }
+    }
+
+    // --- categorize ---
+
+    #[test]
+    fn categorize_nouns() {
+        assert_eq!(categorize("time"), Category::Entity);
+        assert_eq!(categorize("world"), Category::Entity);
+        assert_eq!(categorize("dog"), Category::Entity);
+    }
+
+    #[test]
+    fn categorize_verbs() {
+        assert_eq!(categorize("run"), Category::Action);
+        assert_eq!(categorize("think"), Category::Action);
+    }
+
+    #[test]
+    fn categorize_adjectives() {
+        assert_eq!(categorize("big"), Category::Property);
+        assert_eq!(categorize("beautiful"), Category::Property);
+    }
+
+    #[test]
+    fn categorize_negation() {
+        assert_eq!(categorize("not"), Category::Negation);
+        assert_eq!(categorize("cannot"), Category::Negation);
+    }
+
+    #[test]
+    fn categorize_particles() {
+        assert_eq!(categorize("the"), Category::Particle);
+        assert_eq!(categorize("a"), Category::Particle);
+        assert_eq!(categorize("I"), Category::Particle);
+    }
+
+    #[test]
+    fn categorize_relations() {
+        assert_eq!(categorize("in"), Category::Relation);
+        assert_eq!(categorize("with"), Category::Relation);
+    }
+
+    // --- detect_aspect ---
+
+    #[test]
+    fn aspect_ing_unbounded() {
+        assert_eq!(detect_aspect("running"), Aspect::Unbounded);
+        assert_eq!(detect_aspect("thinking"), Aspect::Unbounded);
+    }
+
+    #[test]
+    fn aspect_ed_bounded() {
+        assert_eq!(detect_aspect("walked"), Aspect::Bounded);
+    }
+
+    #[test]
+    fn aspect_base_timeless() {
+        assert_eq!(detect_aspect("run"), Aspect::Timeless);
+        assert_eq!(detect_aspect("love"), Aspect::Timeless);
+    }
+
+    // --- categorize_sentence ---
+
+    #[test]
+    fn sentence_basic() {
+        let words = categorize_sentence("the dog runs");
+        assert!(!words.is_empty());
+        assert!(words.iter().any(|w| w.word == "dog"));
+        assert!(words.iter().any(|w| w.category == Category::Particle)); // "the"
+    }
+
+    #[test]
+    fn sentence_question() {
+        let words = categorize_sentence("what is time?");
+        assert!(words.iter().any(|w| w.category == Category::Question));
+    }
+
+    #[test]
+    fn sentence_empty() {
+        let words = categorize_sentence("");
+        // Should either be empty or only contain structural markers
+        assert!(words.is_empty() || words.iter().all(|w| w.word.is_empty()));
+    }
+
+    // --- decompose_to_primes ---
+
+    #[test]
+    fn primes_known_word() {
+        let primes = decompose_to_primes("love");
+        assert!(!primes.is_empty());
+    }
+
+    #[test]
+    fn primes_basic_prime() {
+        // "I" is itself a semantic prime
+        let primes = decompose_to_primes("I");
+        assert!(!primes.is_empty());
+        assert!(primes.iter().any(|p| p.prime == "I"));
+    }
+
+    // --- category_priority ---
+
+    #[test]
+    fn priority_ordering() {
+        assert!(category_priority(Category::Entity) < category_priority(Category::Particle));
+    }
+}

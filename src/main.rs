@@ -10,6 +10,8 @@ use std::net::SocketAddr;
 use std::io::Write;
 use std::sync::{Arc, Mutex};
 use std::collections::HashMap;
+use tower_http::catch_panic::CatchPanicLayer;
+use tracing::{info, error};
 
 mod language;
 mod symbol;
@@ -163,18 +165,21 @@ async fn generate(
         // Approximate date (good enough for logging)
         let (year, month, day) = epoch_days_to_date(days_since_epoch);
 
-        let log_ok = std::fs::metadata("/home/steven/torus/access.log")
-            .map(|m| m.len() < MAX_ACCESS_LOG_BYTES)
-            .unwrap_or(true);
-        if log_ok {
-            if let Ok(mut f) = std::fs::OpenOptions::new()
-                .create(true).append(true)
-                .open("/home/steven/torus/access.log")
-            {
-                let _ = writeln!(f, "{:04}-{:02}-{:02}T{:02}:{:02}:{:02}Z\t{}\t{}",
-                    year, month, day, hours, minutes, seconds, ip, text);
+        let log_line = format!("{:04}-{:02}-{:02}T{:02}:{:02}:{:02}Z\t{}\t{}",
+            year, month, day, hours, minutes, seconds, ip, text);
+        tokio::task::spawn_blocking(move || {
+            let log_ok = std::fs::metadata("/home/steven/torus/access.log")
+                .map(|m| m.len() < MAX_ACCESS_LOG_BYTES)
+                .unwrap_or(true);
+            if log_ok {
+                if let Ok(mut f) = std::fs::OpenOptions::new()
+                    .create(true).append(true)
+                    .open("/home/steven/torus/access.log")
+                {
+                    let _ = writeln!(f, "{}", log_line);
+                }
             }
-        }
+        });
     }
 
     let data = symbol::generate(&text);
@@ -191,10 +196,13 @@ async fn generate(
         if let Ok(mut db) = state.symbol_db.lock() {
             if !db.contains_key(&fp) && db.len() < MAX_SYMBOL_DB_ENTRIES {
                 db.insert(fp, text.clone());
-                if let Ok(mut f) = std::fs::OpenOptions::new()
-                    .create(true).append(true).open(SYMBOL_DB_PATH) {
-                    let _ = writeln!(f, "{}\t{}", fp, text);
-                }
+                let text_for_disk = text.clone();
+                tokio::task::spawn_blocking(move || {
+                    if let Ok(mut f) = std::fs::OpenOptions::new()
+                        .create(true).append(true).open(SYMBOL_DB_PATH) {
+                        let _ = writeln!(f, "{}\t{}", fp, text_for_disk);
+                    }
+                });
             }
         }
     }
@@ -236,9 +244,7 @@ async fn og_image(
     }
 
     let data = symbol::generate(&decoded);
-    let svg_str = data.svg
-        .replace("var(--torus-ink, #1a1a1a)", "#e8e0d4")
-        .replace("var(--torus-ink,#1a1a1a)", "#e8e0d4");
+    let svg_str = svg_for_dark_bg(&data.svg);
 
     let svg_inner = svg_str
         .replace("<svg viewBox=\"0 0 600 600\" xmlns=\"http://www.w3.org/2000/svg\">", "")
@@ -267,7 +273,11 @@ async fn og_image(
             let png = pixmap.encode_png().unwrap_or_default();
 
             if let Ok(mut c) = state.og_cache.lock() {
-                if c.len() > 500 { c.clear(); }
+                if c.len() >= 500 {
+                    // Evict ~half the cache to amortize cleanup cost
+                    let keys: Vec<String> = c.keys().take(250).cloned().collect();
+                    for k in keys { c.remove(&k); }
+                }
                 c.insert(decoded, png.clone());
             }
 
@@ -277,7 +287,10 @@ async fn og_image(
                 .body(axum::body::Body::from(png))
                 .unwrap()
         }
-        Err(_) => error_png(),
+        Err(e) => {
+            error!(error = %e, "og image SVG parse failed");
+            error_png()
+        }
     }
 }
 
@@ -287,9 +300,7 @@ async fn png_download(
 ) -> axum::response::Response {
     let decoded = urldecode(&text);
     let data = symbol::generate(&decoded);
-    let svg_str = data.svg
-        .replace("var(--torus-ink, #1a1a1a)", "#e8e0d4")
-        .replace("var(--torus-ink,#1a1a1a)", "#e8e0d4");
+    let svg_str = svg_for_dark_bg(&data.svg);
 
     let full_svg = format!(
         "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"800\" height=\"800\" viewBox=\"-100 -100 800 800\">\
@@ -316,7 +327,10 @@ async fn png_download(
                 .body(axum::body::Body::from(png))
                 .unwrap()
         }
-        Err(_) => error_png(),
+        Err(e) => {
+            error!(error = %e, "png download SVG parse failed");
+            error_png()
+        }
     }
 }
 
@@ -391,6 +405,12 @@ async fn sitemap() -> axum::response::Response {
             </urlset>"
         ))
         .unwrap()
+}
+
+/// Replace CSS variable colors with light-on-dark for PNG/OG export.
+fn svg_for_dark_bg(svg: &str) -> String {
+    svg.replace("var(--torus-ink, #1a1a1a)", "#e8e0d4")
+       .replace("var(--torus-ink,#1a1a1a)", "#e8e0d4")
 }
 
 fn error_png() -> axum::response::Response {
@@ -625,18 +645,41 @@ async fn generate_svg(Json(req): Json<GenerateRequest>) -> axum::response::Respo
         .unwrap()
 }
 
+async fn health() -> &'static str {
+    "ok"
+}
+
+async fn shutdown_signal() {
+    let ctrl_c = tokio::signal::ctrl_c();
+    let mut sigterm = tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate())
+        .expect("failed to install SIGTERM handler");
+    tokio::select! {
+        _ = ctrl_c => {},
+        _ = sigterm.recv() => {},
+    }
+    info!("shutdown signal received, draining connections");
+}
+
 #[tokio::main]
 async fn main() {
+    tracing_subscriber::fmt()
+        .with_env_filter(
+            tracing_subscriber::EnvFilter::try_from_default_env()
+                .unwrap_or_else(|_| tracing_subscriber::EnvFilter::new("info")),
+        )
+        .with_target(false)
+        .without_time()
+        .init();
+
     let mut db = load_symbol_db();
     let pre = precompute_common_symbols(&mut db);
-    eprintln!("Pre-computed {} common symbol fingerprints", pre);
+    info!(count = pre, "pre-computed common symbol fingerprints");
 
     let word_index = decode::WordIndex::build();
-    eprintln!("Word index: {} words across {} categories",
-        word_index.all_words.len(), word_index.by_category.len());
+    info!(words = word_index.all_words.len(), categories = word_index.by_category.len(), "word index loaded");
 
     let single_word_fps = decode::precompute_single_word_fingerprints();
-    eprintln!("Pre-computed {} single-word decode fingerprints", single_word_fps.len());
+    info!(count = single_word_fps.len(), "pre-computed single-word decode fingerprints");
 
     let state = AppState {
         og_cache: Arc::new(Mutex::new(HashMap::new())),
@@ -654,13 +697,168 @@ async fn main() {
         .route("/png/{text}", get(png_download))
         .route("/robots.txt", get(robots_txt))
         .route("/sitemap.xml", get(sitemap))
+        .route("/health", get(health))
+        .layer(CatchPanicLayer::new())
         .with_state(state);
 
     let addr = SocketAddr::from(([127, 0, 0, 1], 3031));
-    let listener = tokio::net::TcpListener::bind(addr).await.unwrap();
-    eprintln!("Torus listening on {addr}");
+    let listener = tokio::net::TcpListener::bind(addr).await
+        .expect("failed to bind to port 3031");
+    info!(%addr, "torus listening");
     axum::serve(
         listener,
         app.into_make_service_with_connect_info::<SocketAddr>(),
-    ).await.unwrap();
+    )
+    .with_graceful_shutdown(shutdown_signal())
+    .await
+    .expect("server error");
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // --- visual_fingerprint ---
+
+    #[test]
+    fn fingerprint_deterministic() {
+        let points: Vec<[f64; 2]> = (0..30).map(|i| [i as f64 * 10.0, i as f64 * 5.0]).collect();
+        assert_eq!(visual_fingerprint(&points), visual_fingerprint(&points));
+    }
+
+    #[test]
+    fn fingerprint_differs_for_different_input() {
+        let a: Vec<[f64; 2]> = (0..30).map(|i| [i as f64, 0.0]).collect();
+        let b: Vec<[f64; 2]> = (0..30).map(|i| [0.0, i as f64]).collect();
+        assert_ne!(visual_fingerprint(&a), visual_fingerprint(&b));
+    }
+
+    // --- urlencoding / urldecode ---
+
+    #[test]
+    fn url_encode_alphanumeric() {
+        assert_eq!(urlencoding("hello"), "hello");
+        assert_eq!(urlencoding("ABC123"), "ABC123");
+    }
+
+    #[test]
+    fn url_encode_spaces() {
+        assert_eq!(urlencoding("hello world"), "hello%20world");
+    }
+
+    #[test]
+    fn url_roundtrip() {
+        for input in &["hello world!", "time is a circle", "a+b=c&d"] {
+            assert_eq!(urldecode(&urlencoding(input)), *input);
+        }
+    }
+
+    #[test]
+    fn url_decode_percent() {
+        assert_eq!(urldecode("hello%20world"), "hello world");
+    }
+
+    // --- base64_encode ---
+
+    #[test]
+    fn base64_known_values() {
+        assert_eq!(base64_encode("Man"), "TWFu");
+        assert_eq!(base64_encode("Hello"), "SGVsbG8=");
+        assert_eq!(base64_encode("Hi"), "SGk=");
+    }
+
+    #[test]
+    fn base64_empty() {
+        assert_eq!(base64_encode(""), "");
+    }
+
+    // --- epoch_days_to_date ---
+
+    #[test]
+    fn epoch_day_zero() {
+        assert_eq!(epoch_days_to_date(0), (1970, 1, 1));
+    }
+
+    #[test]
+    fn epoch_known_date() {
+        // 2024-01-01 = 19723 days after epoch
+        assert_eq!(epoch_days_to_date(19723), (2024, 1, 1));
+    }
+
+    #[test]
+    fn epoch_leap_year() {
+        // 2024-02-29 = 19723 + 31 (Jan) + 28 (Feb 1-28) = 19782
+        assert_eq!(epoch_days_to_date(19782), (2024, 2, 29));
+    }
+
+    // --- svg_for_dark_bg ---
+
+    #[test]
+    fn dark_bg_replaces_css_variable() {
+        let input = r#"<path fill="var(--torus-ink, #1a1a1a)" />"#;
+        let output = svg_for_dark_bg(input);
+        assert!(output.contains("#e8e0d4"));
+        assert!(!output.contains("var(--torus-ink"));
+    }
+
+    // --- analyze_svg ---
+
+    #[test]
+    fn analyze_counts_paths_and_circles() {
+        let svg = r#"<svg><path d="M0 0"/><path d="M1 1"/><circle cx="0" cy="0" r="1"/></svg>"#;
+        let a = analyze_svg(svg);
+        assert_eq!(a.path_count, 2);
+        assert_eq!(a.dot_count, 1);
+    }
+
+    #[test]
+    fn analyze_detects_gap() {
+        let svg = r#"<svg><path d="M0 0" fill-rule="evenodd"/></svg>"#;
+        assert!(analyze_svg(svg).has_gap);
+    }
+
+    #[test]
+    fn analyze_no_gap() {
+        let svg = r#"<svg><path d="M0 0"/></svg>"#;
+        assert!(!analyze_svg(svg).has_gap);
+    }
+
+    // --- symbol generation ---
+
+    #[test]
+    fn generate_produces_valid_svg() {
+        let data = symbol::generate("time");
+        assert!(data.svg.starts_with("<svg"));
+        assert!(data.svg.contains("</svg>"));
+        assert_eq!(data.outer.len(), 720);
+        assert_eq!(data.inner.len(), 720);
+    }
+
+    #[test]
+    fn generate_order_independent() {
+        let fp1 = visual_fingerprint(&symbol::generate("time is a circle").outer);
+        let fp2 = visual_fingerprint(&symbol::generate("a circle is time").outer);
+        assert_eq!(fp1, fp2);
+    }
+
+    #[test]
+    fn generate_empty_input() {
+        let data = symbol::generate("");
+        assert!(data.svg.contains("<svg"));
+        assert_eq!(data.outer.len(), 720);
+    }
+
+    #[test]
+    fn generate_deterministic() {
+        let fp1 = visual_fingerprint(&symbol::generate("love").outer);
+        let fp2 = visual_fingerprint(&symbol::generate("love").outer);
+        assert_eq!(fp1, fp2);
+    }
+
+    #[test]
+    fn generate_different_words_differ() {
+        let fp1 = visual_fingerprint(&symbol::generate("love").outer);
+        let fp2 = visual_fingerprint(&symbol::generate("war").outer);
+        assert_ne!(fp1, fp2);
+    }
 }

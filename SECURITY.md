@@ -21,10 +21,11 @@ I will acknowledge receipt within 48 hours and aim to release a fix within 7 day
 - Only SVG path data (`d` attribute) is extracted; all other content is discarded
 - No uploaded files are written to disk or served back
 
-### Access Logging
+### Logging
 
-- `access.log` records timestamp, IP, and input text for operational visibility
-- Log file is local only and not exposed via any endpoint
+- Structured logging via `tracing` with `RUST_LOG` env filter (default: `info`)
+- `access.log` records timestamp, IP, and input text for operational visibility (capped at 5MB)
+- Log files are local only and not exposed via any endpoint
 
 ### OG Image Cache
 

@@ -625,3 +625,62 @@ fn get_all_known_words() -> Vec<String> {
 
     words
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn decode_attribute_present() {
+        // "Hello" in base64 = "SGVsbG8="
+        let svg = r#"<svg data-torus-text="SGVsbG8=" viewBox="0 0 600 600"></svg>"#;
+        assert_eq!(decode_from_attribute(svg), Some("Hello".to_string()));
+    }
+
+    #[test]
+    fn decode_attribute_missing() {
+        let svg = r#"<svg viewBox="0 0 600 600"></svg>"#;
+        assert_eq!(decode_from_attribute(svg), None);
+    }
+
+    #[test]
+    fn decode_attribute_roundtrip() {
+        // Use the same base64 encoder as the generate-svg endpoint
+        let text = "time is a circle";
+        let encoded = crate::base64_encode(text);
+        let svg = format!(r#"<svg data-torus-text="{}" viewBox="0 0 600 600"></svg>"#, encoded);
+        assert_eq!(decode_from_attribute(&svg), Some(text.to_string()));
+    }
+
+    #[test]
+    fn extract_paths_empty() {
+        let (outer, inner) = extract_svg_paths("<svg></svg>");
+        assert!(outer.is_empty());
+        assert!(inner.is_empty());
+    }
+
+    #[test]
+    fn extract_paths_basic() {
+        let svg = r#"<path d="M100.0,200.0L150.0,250.0ZM300.0,400.0Z"/>"#;
+        let (outer, inner) = extract_svg_paths(svg);
+        assert_eq!(outer.len(), 2);
+        assert_eq!(outer[0], [100.0, 200.0]);
+        assert_eq!(outer[1], [150.0, 250.0]);
+        assert_eq!(inner.len(), 1);
+        assert_eq!(inner[0], [300.0, 400.0]);
+    }
+
+    #[test]
+    fn word_index_non_empty() {
+        let index = WordIndex::build();
+        assert!(!index.all_words.is_empty());
+        assert!(!index.by_category.is_empty());
+    }
+
+    #[test]
+    fn word_index_has_common_words() {
+        let index = WordIndex::build();
+        assert!(index.all_words.contains(&"time".to_string()));
+        assert!(index.all_words.contains(&"love".to_string()));
+    }
+}
