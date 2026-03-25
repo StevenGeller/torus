@@ -1,3 +1,8 @@
+// Geometry and linguistic code uses index-based loops for clarity with interleaved array access.
+#![allow(clippy::needless_range_loop)]
+// Morphological analysis rules use nested tuple slices that clippy finds complex but are readable.
+#![allow(clippy::type_complexity)]
+
 use axum::{
     extract::{ConnectInfo, Multipart, Query},
     http::HeaderMap,
@@ -467,8 +472,8 @@ fn precompute_common_symbols(db: &mut HashMap<u64, String>) -> usize {
     for text in words.iter().chain(phrases.iter()) {
         let data = symbol::generate(text);
         let fp = visual_fingerprint(&data.outer);
-        if !db.contains_key(&fp) {
-            db.insert(fp, text.to_string());
+        if let std::collections::hash_map::Entry::Vacant(e) = db.entry(fp) {
+            e.insert(text.to_string());
             count += 1;
         }
     }
@@ -728,7 +733,7 @@ fn epoch_days_to_date(days: u64) -> (u64, u64, u64) {
         remaining -= mdays[m];
         m += 1;
     }
-    (y, (m + 1) as u64, (remaining + 1) as u64)
+    (y, (m + 1) as u64, remaining + 1)
 }
 
 fn urldecode(s: &str) -> String {

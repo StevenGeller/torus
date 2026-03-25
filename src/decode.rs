@@ -63,7 +63,7 @@ pub fn extract_svg_paths(svg: &str) -> (Vec<[f64; 2]>, Vec<[f64; 2]>) {
 
     let parse_segment = |seg: &str| -> Vec<[f64; 2]> {
         let mut coords = Vec::new();
-        for part in seg.split(|c: char| c == 'M' || c == 'L') {
+        for part in seg.split(['M', 'L']) {
             let part = part.trim();
             if part.is_empty() {
                 continue;
@@ -80,7 +80,7 @@ pub fn extract_svg_paths(svg: &str) -> (Vec<[f64; 2]>, Vec<[f64; 2]>) {
         coords
     };
 
-    let outer = if segments.len() > 0 {
+    let outer = if !segments.is_empty() {
         parse_segment(segments[0])
     } else {
         Vec::new()
@@ -263,11 +263,7 @@ fn detect_marks(dev: &[f64], width: &[f64], n: usize) -> Vec<DetectedMark> {
             }
 
             // Compute width variance in the mark region
-            let region_start = if best_idx > n / 20 {
-                best_idx - n / 20
-            } else {
-                0
-            };
+            let region_start = best_idx.saturating_sub(n / 20);
             let region_end = (best_idx + n / 20).min(n);
             let w_slice: Vec<f64> = (region_start..region_end).map(|k| width[k]).collect();
             let w_var = if w_slice.is_empty() {
@@ -458,7 +454,7 @@ fn search_candidates(
         }
     }
 
-    if mark_count >= 2 && mark_count <= 4 {
+    if (2..=4).contains(&mark_count) {
         // Multi-word: get candidate words per mark position, try combinations
         let mut per_mark_candidates: Vec<Vec<&str>> = Vec::new();
 
@@ -494,7 +490,7 @@ fn search_candidates(
         for combo_idx in 0..limit {
             let mut words_vec = Vec::new();
             let mut idx = combo_idx;
-            for (_mi, candidates) in per_mark_candidates.iter().enumerate() {
+            for candidates in per_mark_candidates.iter() {
                 let ci = idx % candidates.len();
                 idx /= candidates.len();
                 words_vec.push(candidates[ci]);

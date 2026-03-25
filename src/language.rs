@@ -451,12 +451,13 @@ fn detect_modifiers(words: &mut [CategorizedWord]) {
         let lower = words[i].word.to_lowercase();
 
         // Focus particles attach to the next content word
-        if focus_words.contains(&lower.as_str()) {
-            if i + 1 < len && words[i + 1].category != Category::Question {
-                words[i].role = Role::Modifier;
-                words[i].modifies = Some(i + 1);
-                continue;
-            }
+        if focus_words.contains(&lower.as_str())
+            && i + 1 < len
+            && words[i + 1].category != Category::Question
+        {
+            words[i].role = Role::Modifier;
+            words[i].modifies = Some(i + 1);
+            continue;
         }
 
         // Adjective before noun
@@ -1148,8 +1149,8 @@ fn spelling_variants(root: &str) -> Vec<String> {
     // "creat" → "create", "lov" → "love" (add trailing e)
     v.push(format!("{}e", root));
     // "happi" → "happy" (i→y)
-    if root.ends_with('i') {
-        v.push(format!("{}y", &root[..root.len() - 1]));
+    if let Some(stripped) = root.strip_suffix('i') {
+        v.push(format!("{}y", stripped));
     }
     // "runn" → "run" (doubled consonant)
     if root.len() >= 3 {
@@ -1224,7 +1225,7 @@ mod tests {
     fn hash_to_float_in_range() {
         for seed in 0..100u64 {
             let f = hash_to_float(seed * 1000000);
-            assert!(f >= 0.0 && f < 1.0, "hash_to_float({}) = {}", seed, f);
+            assert!((0.0..1.0).contains(&f), "hash_to_float({}) = {}", seed, f);
         }
     }
 
